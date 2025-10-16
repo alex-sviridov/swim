@@ -64,21 +64,27 @@ func NewConnector(dryrun bool) (c *Connector, err error) {
 	return c, nil
 }
 
-func (c *Connector) ListInstances() (instances []connector.Instance, err error) {
+func (c *Connector) ListServers() (servers []connector.Server, err error) {
 	response, err := c.instanceApi.ListServers(&instance.ListServersRequest{})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	for _, server := range response.Servers {
-		i := newInstance(server)
-		instances = append(instances, i)
+		s := newServer(server, c)
+		servers = append(servers, s)
 	}
-	return instances, nil
+	return servers, nil
 }
 
-// NewProvisionRequest creates a new ProvisionRequest for JSON unmarshaling
-func (c *Connector) NewProvisionRequest() connector.ProvisionRequest {
-	return &ProvisionRequest{}
+func (c *Connector) GetServerByID(id string) (connector.Server, error) {
+	resp, err := c.instanceApi.GetServer(&instance.GetServerRequest{
+		Zone:     c.defaultZone,
+		ServerID: id,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return newServer(resp.Server, c), nil
 }
 
 var _ connector.Connector = (*Connector)(nil)

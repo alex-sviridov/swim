@@ -11,11 +11,11 @@ import (
 func runInteractiveMode(log *slog.Logger, conn connector.Connector, payload string) {
 	log.Info("Running in interactive mode", "payload", payload)
 
-	// Provision the instance
-	instance, err := conn.ProvisionInstance(payload)
+	// Provision the server
+	server, err := conn.CreateServer(payload)
 	if err != nil {
-		log.Error("Failed to provision instance", "error", err)
+		log.Error("Failed to provision server", "error", err)
 		return
 	}
-	fmt.Printf("Provisioned instance: %+v\n", instance)
+	fmt.Printf("Provisioned server: %+v\n", server)
 }

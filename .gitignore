@@ -1,0 +1,34 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*_test
+
+# Output of the go tool
+.cache
+.DS_Store
+
+# Environment variables
+.env
+
+# External dependencies
+/vendor
+
+# Go workspace
+/bin
+/pkg
+
+# IDE-specific files
+.idea/
+*.iml
+.vscode/
+
+# Build outputs
+/build/
+
+# Logs and databases
+*.log
+*.db

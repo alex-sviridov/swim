@@ -3,12 +3,14 @@ package main
 import (
 	"flag"
 	"os"
+    "github.com/joho/godotenv"
 
 	"github.com/alex-sviridov/swim/internal/connector/scaleway"
 	"github.com/alex-sviridov/swim/internal/logger"
 )
 
 func main() {
+	err := godotenv.Load()
 	// Define CLI flags
 	interactive := flag.String("interactive", "", "JSON payload for one-shot interactive mode")
 	redis := flag.String("redis", "", "Redis connection string for service mode")

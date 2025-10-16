@@ -11,15 +11,12 @@ import (
 	"github.com/scaleway/scaleway-sdk-go/scw"
 )
 
-// provisionInstance is the internal implementation that creates a new Scaleway instance
+// CreateServer is the internal implementation that creates a new Scaleway server
 // This method uses scaleway-specific types and has no knowledge of the connector interface
-func (c *Connector) ProvisionInstance(payload string) (connector.Instance, error) {
-	// Step 0: Get
-
-	// Create a new request object from the connector (decoupled from concrete type)
+func (c *Connector) CreateServer(payload string) (connector.Server, error) {
 	req := ProvisionRequest{}
 
-	// Unmarshal JSON into the concrete type
+	// Unmarshal the payload
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
 		return nil, err
 	}
@@ -69,7 +66,11 @@ func (c *Connector) ProvisionInstance(payload string) (connector.Instance, error
 	}
 
 	// print server.StateDetail
-	fmt.Printf("Server state: %s\n", server.GetState())
+	state, err := server.GetState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get server state: %w", err)
+	}
+	fmt.Printf("Server state: %s\n", state)
 
 	return server, nil
 }
@@ -134,7 +135,7 @@ func (c *Connector) attachRoutedIPv6(serverID string) error {
 }
 
 // getServer retrieves the public IP address of the server
-func (c *Connector) getServer(serverID string) (*Instance, error) {
+func (c *Connector) getServer(serverID string) (*Server, error) {
 	req := &instance.GetServerRequest{
 		Zone:     c.defaultZone,
 		ServerID: serverID,
@@ -146,7 +147,7 @@ func (c *Connector) getServer(serverID string) (*Instance, error) {
 	}
 
 	if len(resp.Server.PublicIPs) > 0 {
-		return newInstance(resp.Server), nil
+		return newServer(resp.Server, c), nil
 	}
 
 	return nil, fmt.Errorf("no public IP found for server")

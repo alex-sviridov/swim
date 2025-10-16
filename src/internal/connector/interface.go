@@ -5,13 +5,15 @@ type ProvisionRequest interface {
 }
 
 type Connector interface {
-	ListInstances() ([]Instance, error)
-	ProvisionInstance(payload string) (Instance, error)
-	// NewProvisionRequest creates a new ProvisionRequest that can be unmarshaled from JSON
-	NewProvisionRequest() ProvisionRequest
+	ListServers() ([]Server, error)
+	GetServerByID(id string) (Server, error)
+	CreateServer(payload string) (Server, error)
 }
 
-type Instance interface {
+type Server interface {
+	GetID() string
 	GetName() string
+	GetIPv6Address() string
+	GetState() (string, error)
 	String() string
 }

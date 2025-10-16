@@ -2,6 +2,8 @@ package scaleway
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/alex-sviridov/swim/internal/connector"
 )
 
@@ -39,6 +41,20 @@ func (r *ProvisionRequest) Validate() error {
 	}
 	if r.CloudInitFile == "" {
 		missing = append(missing, "CloudInitFile")
+	} else {
+		// Check if the file exists and can be read
+		if _, err := os.Stat(r.CloudInitFile); err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("CloudInitFile does not exist: %s", r.CloudInitFile)
+			}
+			return fmt.Errorf("CloudInitFile cannot be accessed: %w", err)
+		}
+		// Try to open the file to verify read permissions
+		f, err := os.Open(r.CloudInitFile)
+		if err != nil {
+			return fmt.Errorf("CloudInitFile cannot be read: %w", err)
+		}
+		f.Close()
 	}
 
 	if len(missing) > 0 {
