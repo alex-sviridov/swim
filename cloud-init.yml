@@ -1,0 +1,35 @@
+#cloud-config
+
+# Create user 'student' with sudo privileges
+users:
+  - name: student
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC+cgFKFtWgCp89Zh+VEV23kfHr2IZSAoy7kg9gb1Put alex@centos-4gb-fsn1-2
+
+# Disable root login via SSH
+ssh_pwauth: false
+disable_root: true
+
+# Configure SSH daemon
+runcmd:
+  - sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - systemctl restart sshd
+
+# Optional: Update and upgrade packages
+package_update: true
+package_upgrade: true
+
+# Optional: Install useful packages
+packages:
+  - vim
+  - curl
+  - git
+  - htop
+
+# Final message
+final_message: "Server setup complete. SSH as 'student' user. Root login disabled."
