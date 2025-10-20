@@ -34,12 +34,14 @@ func New(log *slog.Logger, conn connector.Connector, redisClient redis.ClientInt
 
 // ProcessRequest handles a single provision request from the queue
 func (p *Provisioner) ProcessRequest(ctx context.Context, payload string) {
-	// Extract TTL for deletion time calculation (minimal parse for caching)
+	// Extract TTL, WebUsername, and LabID for deletion time calculation and caching
 	var req struct {
-		TTLMinutes int `json:"TTLMinutes"`
+		TTLMinutes  int    `json:"TTLMinutes"`
+		WebUsername string `json:"WebUsername"`
+		LabID       int    `json:"LabID"`
 	}
 	if err := json.Unmarshal([]byte(payload), &req); err != nil {
-		p.log.Error("failed to parse TTL from payload", "error", err)
+		p.log.Error("failed to parse payload", "error", err)
 		return
 	}
 	deletionAt := time.Now().Add(time.Duration(req.TTLMinutes) * time.Minute)
@@ -72,6 +74,8 @@ func (p *Provisioner) ProcessRequest(ctx context.Context, payload string) {
 		State:         state,
 		ProvisionedAt: now,
 		DeletionAt:    deletionAt,
+		WebUsername:   req.WebUsername,
+		LabID:         req.LabID,
 	}
 
 	if err := p.redisClient.PushServerState(ctx, cacheKey, serverState, config.ServerCacheTTL); err != nil {

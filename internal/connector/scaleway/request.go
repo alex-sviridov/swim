@@ -13,7 +13,7 @@ type ProvisionRequest struct {
 	SecurityGroupName string
 	ImageID           string
 	WebUsername       string
-	WebLabID          int
+	LabID             int
 	CloudInitFile     string // path to cloud-init file (for unmarshaling)
 	CloudInitContent  string // cloud-init content as text
 	TTLMinutes        int    // time to live in minutes
@@ -54,8 +54,8 @@ func UnmarshalAndValidate(payload string) (*ProvisionRequest, error) {
 	if req.WebUsername == "" {
 		missing = append(missing, "WebUsername")
 	}
-	if req.WebLabID == 0 {
-		missing = append(missing, "WebLabID")
+	if req.LabID == 0 {
+		missing = append(missing, "LabID")
 	}
 	if req.TTLMinutes == 0 {
 		missing = append(missing, "TTLMinutes")
@@ -66,7 +66,7 @@ func UnmarshalAndValidate(payload string) (*ProvisionRequest, error) {
 	}
 
 	// Generate server name
-	req.generatedName = generateServerName(req.WebLabID)
+	req.generatedName = generateServerName(req.LabID)
 
 	// Transform CloudInitFile to CloudInitContent
 	if req.CloudInitFile != "" {

@@ -28,7 +28,7 @@ func TestUnmarshalAndValidate(t *testing.T) {
 				SecurityGroupName: "default",
 				ImageID:           "ubuntu-jammy",
 				WebUsername:       "testuser",
-				WebLabID:          1,
+				LabID:             1,
 				TTLMinutes:        60,
 				CloudInitFile:     validCloudInitFile,
 			},
@@ -40,7 +40,7 @@ func TestUnmarshalAndValidate(t *testing.T) {
 				SecurityGroupName: "default",
 				ImageID:           "ubuntu-jammy",
 				WebUsername:       "testuser",
-				WebLabID:          1,
+				LabID:             1,
 				TTLMinutes:        60,
 				CloudInitFile:     validCloudInitFile,
 			},
@@ -52,7 +52,7 @@ func TestUnmarshalAndValidate(t *testing.T) {
 				ServerType:    "DEV1-S",
 				ImageID:       "ubuntu-jammy",
 				WebUsername:   "testuser",
-				WebLabID:      1,
+				LabID:         1,
 				TTLMinutes:    60,
 				CloudInitFile: validCloudInitFile,
 			},
@@ -64,7 +64,7 @@ func TestUnmarshalAndValidate(t *testing.T) {
 				ServerType:        "DEV1-S",
 				SecurityGroupName: "default",
 				WebUsername:       "testuser",
-				WebLabID:          1,
+				LabID:             1,
 				TTLMinutes:        60,
 				CloudInitFile:     validCloudInitFile,
 			},
@@ -76,7 +76,7 @@ func TestUnmarshalAndValidate(t *testing.T) {
 				ServerType:        "DEV1-S",
 				SecurityGroupName: "default",
 				ImageID:           "ubuntu-jammy",
-				WebLabID:          1,
+				LabID:             1,
 				TTLMinutes:        60,
 				CloudInitFile:     validCloudInitFile,
 			},
@@ -101,7 +101,7 @@ func TestUnmarshalAndValidate(t *testing.T) {
 				SecurityGroupName: "default",
 				ImageID:           "ubuntu-jammy",
 				WebUsername:       "testuser",
-				WebLabID:          1,
+				LabID:             1,
 				CloudInitFile:     validCloudInitFile,
 			},
 			wantErr: true,
@@ -113,7 +113,7 @@ func TestUnmarshalAndValidate(t *testing.T) {
 				SecurityGroupName: "default",
 				ImageID:           "ubuntu-jammy",
 				WebUsername:       "testuser",
-				WebLabID:          1,
+				LabID:             1,
 				TTLMinutes:        60,
 			},
 			wantErr: false,
@@ -125,7 +125,7 @@ func TestUnmarshalAndValidate(t *testing.T) {
 				SecurityGroupName: "default",
 				ImageID:           "ubuntu-jammy",
 				WebUsername:       "testuser",
-				WebLabID:          1,
+				LabID:             1,
 				TTLMinutes:        60,
 				CloudInitFile:     "/nonexistent/file.yml",
 			},
@@ -164,9 +164,9 @@ func TestUnmarshalAndValidate(t *testing.T) {
 					t.Error("ServerName should be generated")
 				}
 				// Verify server name pattern: lab{num}-{8 letters}
-				expected := len("lab") + len(fmt.Sprint(tt.req.WebLabID)) + 1 + 8 // lab + labID + - + 8 chars
+				expected := len("lab") + len(fmt.Sprint(tt.req.LabID)) + 1 + 8 // lab + labID + - + 8 chars
 				if len(req.ServerName()) != expected {
-					t.Errorf("ServerName length = %d, want %d (pattern: lab%d-{8chars})", len(req.ServerName()), expected, tt.req.WebLabID)
+					t.Errorf("ServerName length = %d, want %d (pattern: lab%d-{8chars})", len(req.ServerName()), expected, tt.req.LabID)
 				}
 			}
 		})

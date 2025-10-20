@@ -16,9 +16,9 @@ import (
 
 // Mock Connector
 type mockConnector struct {
-	createServerFunc   func(payload string) (connector.Server, error)
-	getServerByIDFunc  func(id string) (connector.Server, error)
-	listServersFunc    func() ([]connector.Server, error)
+	createServerFunc  func(payload string) (connector.Server, error)
+	getServerByIDFunc func(id string) (connector.Server, error)
+	listServersFunc   func() ([]connector.Server, error)
 }
 
 func (m *mockConnector) CreateServer(payload string) (connector.Server, error) {
@@ -87,11 +87,11 @@ func (m *mockServer) String() string {
 
 // Mock Redis Client
 type mockRedisClient struct {
-	serverStates      map[string]redis.ServerState
-	pushStateFunc     func(ctx context.Context, key string, state redis.ServerState, ttl time.Duration) error
-	getStateFunc      func(ctx context.Context, key string) (*redis.ServerState, error)
-	popPayloadFunc    func(ctx context.Context, key string, timeout time.Duration) (string, error)
-	getExpiredFunc    func(ctx context.Context, prefix string) ([]redis.ServerState, error)
+	serverStates   map[string]redis.ServerState
+	pushStateFunc  func(ctx context.Context, key string, state redis.ServerState, ttl time.Duration) error
+	getStateFunc   func(ctx context.Context, key string) (*redis.ServerState, error)
+	popPayloadFunc func(ctx context.Context, key string, timeout time.Duration) (string, error)
+	getExpiredFunc func(ctx context.Context, prefix string) ([]redis.ServerState, error)
 }
 
 func (m *mockRedisClient) PushServerState(ctx context.Context, key string, state redis.ServerState, ttl time.Duration) error {
@@ -134,6 +134,10 @@ func (m *mockRedisClient) Close() error {
 	return nil
 }
 
+func (m *mockRedisClient) GetServersByFilter(ctx context.Context, prefix string, username string, labID *int) ([]redis.ServerState, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (m *mockRedisClient) DeleteServerState(ctx context.Context, cacheKey string) error {
 	if m.serverStates != nil {
 		delete(m.serverStates, cacheKey)
@@ -164,9 +168,9 @@ func TestProcessRequestSuccess(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 
 	server := &mockServer{
-		id:   "server-123",
-		name: "test-server",
-		ipv6: "2001:db8::1",
+		id:           "server-123",
+		name:         "test-server",
+		ipv6:         "2001:db8::1",
 		stateChanges: []string{"starting", "starting", config.StateBooted},
 	}
 
@@ -187,7 +191,7 @@ func TestProcessRequestSuccess(t *testing.T) {
 		"SecurityGroupName": "default",
 		"ImageID": "ubuntu-22.04",
 		"WebUsername": "testuser",
-		"WebLabID": 123,
+		"LabID": 123,
 		"TTLMinutes": 60
 	}`
 
@@ -209,6 +213,12 @@ func TestProcessRequestSuccess(t *testing.T) {
 	}
 	if state.IPv6 != server.GetIPv6Address() {
 		t.Errorf("Cached IPv6 = %v, want %v", state.IPv6, server.GetIPv6Address())
+	}
+	if state.WebUsername != "testuser" {
+		t.Errorf("Cached WebUsername = %v, want %v", state.WebUsername, "testuser")
+	}
+	if state.LabID != 123 {
+		t.Errorf("Cached LabID = %v, want %v", state.LabID, 123)
 	}
 }
 
@@ -246,7 +256,7 @@ func TestProcessRequestCreateServerFails(t *testing.T) {
 		"SecurityGroupName": "default",
 		"ImageID": "ubuntu-22.04",
 		"WebUsername": "testuser",
-		"WebLabID": 123,
+		"LabID": 123,
 		"TTLMinutes": 60
 	}`
 
@@ -288,7 +298,7 @@ func TestProcessRequestCacheFailure(t *testing.T) {
 		"SecurityGroupName": "default",
 		"ImageID": "ubuntu-22.04",
 		"WebUsername": "testuser",
-		"WebLabID": 123,
+		"LabID": 123,
 		"TTLMinutes": 60
 	}`
 
@@ -330,7 +340,7 @@ func TestProcessRequestGetStateFails(t *testing.T) {
 		"SecurityGroupName": "default",
 		"ImageID": "ubuntu-22.04",
 		"WebUsername": "testuser",
-		"WebLabID": 123,
+		"LabID": 123,
 		"TTLMinutes": 60
 	}`
 
@@ -523,7 +533,7 @@ func TestTTLParsing(t *testing.T) {
 				"SecurityGroupName": "default",
 				"ImageID":           "ubuntu-22.04",
 				"WebUsername":       "testuser",
-				"WebLabID":          123,
+				"LabID":             123,
 				"TTLMinutes":        tt.ttlMinutes,
 			}
 

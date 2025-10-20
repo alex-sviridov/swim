@@ -3,7 +3,8 @@
     "allow": [
       "Bash(mkdir:*)",
       "Bash(cp:*)",
-      "Bash(wsl bash -c:*)"
+      "Bash(wsl bash -c:*)",
+      "Bash(go test ./internal/provisioner/... ./internal/cleanup/... ./internal/decommissioner/... -v)"
     ],
     "deny": [],
     "ask": []

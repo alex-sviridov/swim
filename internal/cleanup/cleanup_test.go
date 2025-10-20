@@ -169,6 +169,10 @@ func (m *mockRedisClient) Close() error {
 	return nil
 }
 
+func (m *mockRedisClient) GetServersByFilter(ctx context.Context, prefix string, username string, labID *int) ([]redis.ServerState, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (m *mockRedisClient) DeleteServerState(ctx context.Context, cacheKey string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -15,6 +15,7 @@ type ClientInterface interface {
 	PushServerState(ctx context.Context, cacheKey string, state ServerState, ttl time.Duration) error
 	GetServerState(ctx context.Context, cacheKey string) (*ServerState, error)
 	GetExpiredServers(ctx context.Context, prefix string) ([]ServerState, error)
+	GetServersByFilter(ctx context.Context, prefix string, username string, labID *int) ([]ServerState, error)
 	DeleteServerState(ctx context.Context, cacheKey string) error
 	Close() error
 }
@@ -65,6 +66,8 @@ type ServerState struct {
 	State         string    `json:"state"`
 	ProvisionedAt time.Time `json:"provisioned_at"`
 	DeletionAt    time.Time `json:"deletion_at"`
+	WebUsername   string    `json:"webusername"`
+	LabID         int       `json:"labid"`
 }
 
 // PopPayload pops a payload from the queue (blocking)
@@ -147,6 +150,40 @@ func (c *Client) GetExpiredServers(ctx context.Context, prefix string) ([]Server
 	}
 
 	return expired, nil
+}
+
+// GetServersByFilter returns servers filtered by username and optionally labID
+func (c *Client) GetServersByFilter(ctx context.Context, prefix string, username string, labID *int) ([]ServerState, error) {
+	var filtered []ServerState
+
+	iter := c.client.Scan(ctx, 0, prefix+"*", 0).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+		state, err := c.GetServerState(ctx, key)
+		if err != nil {
+			// Log scan error for visibility but continue processing other keys
+			fmt.Printf("warning: failed to get server state for key %s: %v\n", key, err)
+			continue
+		}
+
+		// Filter by username (required)
+		if state.WebUsername != username {
+			continue
+		}
+
+		// Filter by labID if provided
+		if labID != nil && state.LabID != *labID {
+			continue
+		}
+
+		filtered = append(filtered, *state)
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("scan failed: %w", err)
+	}
+
+	return filtered, nil
 }
 
 // DeleteServerState removes a server state from Redis cache

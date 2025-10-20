@@ -97,7 +97,7 @@ func (c *Connector) findSecurityGroup(name string) (string, error) {
 func (c *Connector) createServer(req ProvisionRequest, securityGroupID string) (string, error) {
 	tags := []string{
 		fmt.Sprintf("webuser:%s", req.WebUsername),
-		fmt.Sprintf("labid:%d", req.WebLabID),
+		fmt.Sprintf("labid:%d", req.LabID),
 	}
 
 	createReq := &instance.CreateServerRequest{

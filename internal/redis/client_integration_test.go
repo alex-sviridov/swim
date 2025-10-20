@@ -194,7 +194,7 @@ func TestPopPayload(t *testing.T) {
 
 	ctx := context.Background()
 	queueKey := "test:queue"
-	testPayload := `{"ServerType":"DEV1-S","WebUsername":"testuser","WebLabID":1,"TTLMinutes":60}`
+	testPayload := `{"ServerType":"DEV1-S","WebUsername":"testuser","LabID":1,"TTLMinutes":60}`
 
 	// Push payload to queue
 	err := client.client.RPush(ctx, queueKey, testPayload).Err()
