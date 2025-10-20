@@ -2,6 +2,7 @@ package scaleway
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/alex-sviridov/swim/internal/connector"
@@ -15,9 +16,10 @@ type Connector struct {
 	dryrun      bool
 	projectID   string
 	defaultZone scw.Zone
+	log         *slog.Logger
 }
 
-func NewConnector(dryrun bool) (c *Connector, err error) {
+func NewConnector(log *slog.Logger, dryrun bool) (c *Connector, err error) {
 	accessKey := os.Getenv("SCW_ACCESS_KEY")
 	secretKey := os.Getenv("SCW_SECRET_KEY")
 	organizationID := os.Getenv("SCW_ORGANIZATION_ID")
@@ -49,6 +51,7 @@ func NewConnector(dryrun bool) (c *Connector, err error) {
 		projectID:   projectID,
 		defaultZone: scw.Zone(defaultZone),
 		dryrun:      dryrun,
+		log:         log,
 	}
 
 	// Create a Scaleway client
@@ -70,7 +73,7 @@ func (c *Connector) ListServers() (servers []connector.Server, err error) {
 		return nil, err
 	}
 	for _, server := range response.Servers {
-		s := newServer(server, c)
+		s := newServer(server, c, c.log)
 		servers = append(servers, s)
 	}
 	return servers, nil
@@ -84,7 +87,7 @@ func (c *Connector) GetServerByID(id string) (connector.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newServer(resp.Server, c), nil
+	return newServer(resp.Server, c, c.log), nil
 }
 
 var _ connector.Connector = (*Connector)(nil)

@@ -32,3 +32,6 @@
 # Logs and databases
 *.log
 *.db
+
+# Claude
+.claude/

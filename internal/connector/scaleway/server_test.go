@@ -1,10 +1,12 @@
 package scaleway
 
 import (
+	"log/slog"
+	"net"
+	"os"
 	"testing"
 
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
-	"github.com/scaleway/scaleway-sdk-go/scw"
 )
 
 func TestServer_GetID(t *testing.T) {
@@ -57,18 +59,19 @@ func TestServer_String(t *testing.T) {
 }
 
 func TestNewServer(t *testing.T) {
-	ipAddr := scw.IPAddress("2001:db8::1")
+	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	ipAddr := net.ParseIP("2001:db8::1")
 	scwServer := &instance.Server{
 		ID:   "test-id",
 		Name: "test-name",
 		PublicIPs: []*instance.ServerIP{
 			{
-				Address: &ipAddr,
+				Address: ipAddr,
 			},
 		},
 	}
 
-	server := newServer(scwServer, nil)
+	server := newServer(scwServer, nil, log)
 
 	if server.GetID() != "test-id" {
 		t.Errorf("newServer() ID = %v, want %v", server.GetID(), "test-id")
@@ -82,13 +85,14 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestNewServer_NoPublicIP(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	scwServer := &instance.Server{
 		ID:        "test-id",
 		Name:      "test-name",
 		PublicIPs: []*instance.ServerIP{},
 	}
 
-	server := newServer(scwServer, nil)
+	server := newServer(scwServer, nil, log)
 
 	if server.GetIPv6Address() != "" {
 		t.Errorf("newServer() with no IPs should have empty IPv6, got %v", server.GetIPv6Address())

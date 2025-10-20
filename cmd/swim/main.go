@@ -3,10 +3,12 @@ package main
 import (
 	"flag"
 	"os"
-    "github.com/joho/godotenv"
+
+	"github.com/joho/godotenv"
 
 	"github.com/alex-sviridov/swim/internal/connector/scaleway"
 	"github.com/alex-sviridov/swim/internal/logger"
+	"github.com/alex-sviridov/swim/internal/redis"
 )
 
 func main() {
@@ -14,8 +16,7 @@ func main() {
 	_ = godotenv.Load()
 
 	// Define CLI flags
-	interactive := flag.String("interactive", "", "JSON payload for one-shot interactive mode")
-	redis := flag.String("redis", "", "Redis connection string for service mode")
+	redisAddr := flag.String("redis", "", "Redis connection string (required)")
 	verbose := flag.Bool("verbose", false, "Enable verbose logging (info level)")
 	dryrun := flag.Bool("dry-run", false, "Dry-run without creating a real instance")
 	flag.Parse()
@@ -23,23 +24,36 @@ func main() {
 	// Initialize logger
 	log := logger.New(*verbose)
 
-	// Validate that exactly one mode is specified
-	if (*interactive == "" && *redis == "") || (*interactive != "" && *redis != "") {
-		log.Error("Error: specify exactly one of --interactive or --redis")
-		os.Exit(1)
+	// Validate redis address
+	if *redisAddr == "" {
+		*redisAddr = os.Getenv("REDIS_CONNECTION_STRING")
+		if *redisAddr == "" {
+			log.Error("--redis flag or REDIS_CONNECTION_STRING environment variable is required")
+			os.Exit(1)
+		}
 	}
 
-	// Create the SCW connection
-	conn, err := scaleway.NewConnector(*dryrun)
+	// Create Scaleway connector
+	conn, err := scaleway.NewConnector(log, *dryrun)
 	if err != nil {
-		log.Error("Error connecting to Scaleway", "error", err)
+		log.Error("connecting to scaleway", "error", err)
 		os.Exit(1)
 	}
 
-	// Run in the appropriate mode
-	if *interactive != "" {
-		runInteractiveMode(log, conn, *interactive)
-	} else {
-		runRedisMode(log, conn, *redis)
+	// Create Redis client
+	redisClient, err := redis.NewClient(redis.Config{
+		Address:  *redisAddr,
+		Password: os.Getenv("REDIS_PASSWORD"),
+		DB:       0,
+	})
+	if err != nil {
+		log.Error("failed to connect to redis", "error", err)
+		os.Exit(1)
 	}
+	defer redisClient.Close()
+
+	log.Info("connected to redis, starting service")
+
+	// Run the queue processor
+	runQueueProcessor(log, conn, redisClient)
 }

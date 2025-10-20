@@ -2,9 +2,7 @@ package scaleway
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/alex-sviridov/swim/internal/connector"
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
@@ -14,78 +12,62 @@ import (
 // CreateServer is the internal implementation that creates a new Scaleway server
 // This method uses scaleway-specific types and has no knowledge of the connector interface
 func (c *Connector) CreateServer(payload string) (connector.Server, error) {
-	req := ProvisionRequest{}
-
-	// Unmarshal the payload
-	if err := json.Unmarshal([]byte(payload), &req); err != nil {
-		return nil, err
-	}
-
-	// Validate the request
-	if err := req.Validate(); err != nil {
+	// Unmarshal, validate, and transform cloud-init file to content
+	req, err := UnmarshalAndValidate(payload)
+	if err != nil {
 		return nil, err
 	}
 
 	// Step 1: Find security group by name
 	securityGroup, err := c.findSecurityGroup(req.SecurityGroupName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find security group: %w", err)
+		return nil, fmt.Errorf("find security group: %w", err)
 	}
 
 	if c.dryrun {
 		// Return a mock server for dry-run mode
 		dryRunServer := &Server{
 			id:        "dry-run-server-id",
-			name:      req.ServerName,
+			name:      req.ServerName(),
 			ipv6:      "2001:db8::1",
 			connector: c,
 		}
 		fmt.Printf("[DRY-RUN] Would create server: %s (type: %s, security group: %s)\n",
-			req.ServerName, req.ServerType, securityGroup)
+			req.ServerName(), req.ServerType, securityGroup)
 		return dryRunServer, nil
 	}
 
 	// Step 2: Create the server
-	serverID, err := c.createServer(req, securityGroup)
+	serverID, err := c.createServer(*req, securityGroup)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create server: %w", err)
-	}
-
-	// Create a cleanup function that will be called on any error
-	cleanup := func() {
-		// Delete the server on error
-		deleteReq := &instance.DeleteServerRequest{
-			Zone:     c.defaultZone,
-			ServerID: serverID,
-		}
-		_ = c.instanceApi.DeleteServer(deleteReq)
+		return nil, fmt.Errorf("create server: %w", err)
 	}
 
 	// Step 3: Attach routed IPv6
 	if err := c.attachRoutedIPv6(serverID); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to attach IPv6: %w", err)
+		c.cleanupServer(serverID)
+		return nil, fmt.Errorf("attach ipv6: %w", err)
 	}
 
 	// Step 4: Get server instance
 	server, err := c.getServer(serverID)
 	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to get server IP: %w", err)
+		c.cleanupServer(serverID)
+		return nil, fmt.Errorf("get server ip: %w", err)
 	}
 
 	// Step 5: Upload cloud-init if provided
-	if req.CloudInitFile != "" {
-		if err := c.uploadCloudInit(serverID, req.CloudInitFile); err != nil {
-			cleanup()
-			return nil, fmt.Errorf("failed to upload cloud-init: %w", err)
+	if req.CloudInitContent != "" {
+		if err := c.uploadCloudInitContent(serverID, []byte(req.CloudInitContent)); err != nil {
+			c.cleanupServer(serverID)
+			return nil, fmt.Errorf("upload cloud-init: %w", err)
 		}
 	}
 
 	// Step 6: Power on the server
 	if err := c.powerOnServer(serverID); err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to power on server: %w", err)
+		c.cleanupServer(serverID)
+		return nil, fmt.Errorf("power on server: %w", err)
 	}
 
 	return server, nil
@@ -120,7 +102,7 @@ func (c *Connector) createServer(req ProvisionRequest, securityGroupID string) (
 
 	createReq := &instance.CreateServerRequest{
 		Zone:              c.defaultZone,
-		Name:              req.ServerName,
+		Name:              req.ServerName(),
 		Project:           &c.projectID,
 		CommercialType:    req.ServerType,
 		Image:             &req.ImageID,
@@ -163,19 +145,14 @@ func (c *Connector) getServer(serverID string) (*Server, error) {
 	}
 
 	if len(resp.Server.PublicIPs) > 0 {
-		return newServer(resp.Server, c), nil
+		return newServer(resp.Server, c, c.log), nil
 	}
 
 	return nil, fmt.Errorf("no public IP found for server")
 }
 
-// uploadCloudInit uploads cloud-init user data from a file
-func (c *Connector) uploadCloudInit(serverID, cloudInitFile string) error {
-	content, err := os.ReadFile(cloudInitFile)
-	if err != nil {
-		return fmt.Errorf("failed to read cloud-init file: %w", err)
-	}
-
+// uploadCloudInitContent uploads cloud-init user data from memory
+func (c *Connector) uploadCloudInitContent(serverID string, content []byte) error {
 	req := &instance.SetServerUserDataRequest{
 		Zone:     c.defaultZone,
 		ServerID: serverID,
@@ -196,4 +173,13 @@ func (c *Connector) powerOnServer(serverID string) error {
 
 	_, err := c.instanceApi.ServerAction(req)
 	return err
+}
+
+// cleanupServer deletes a server (used for error cleanup)
+func (c *Connector) cleanupServer(serverID string) {
+	deleteReq := &instance.DeleteServerRequest{
+		Zone:     c.defaultZone,
+		ServerID: serverID,
+	}
+	_ = c.instanceApi.DeleteServer(deleteReq)
 }

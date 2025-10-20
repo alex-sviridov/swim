@@ -1,9 +1,5 @@
 package connector
 
-type ProvisionRequest interface {
-	Validate() error
-}
-
 type Connector interface {
 	ListServers() ([]Server, error)
 	GetServerByID(id string) (Server, error)
