@@ -6,7 +6,7 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"github.com/alex-sviridov/swim/internal/connector/scaleway"
+	"github.com/alex-sviridov/swim/internal/connector/hcloud"
 	"github.com/alex-sviridov/swim/internal/logger"
 	"github.com/alex-sviridov/swim/internal/redis"
 )
@@ -33,10 +33,10 @@ func main() {
 		}
 	}
 
-	// Create Scaleway connector
-	conn, err := scaleway.NewConnector(log, *dryrun)
+	// Create Hetzner Cloud connector
+	conn, err := hcloud.NewConnector(log, *dryrun)
 	if err != nil {
-		log.Error("connecting to scaleway", "error", err)
+		log.Error("connecting to hetzner cloud", "error", err)
 		os.Exit(1)
 	}
 

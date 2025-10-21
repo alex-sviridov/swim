@@ -135,7 +135,7 @@ func TestPushAndGetServerState(t *testing.T) {
 		ID:            "test-server-1",
 		Name:          "test-server",
 		IPv6:          "2001:db8::1",
-		State:         "booted",
+		State:         "running",
 		ProvisionedAt: now,
 		DeletionAt:    now.Add(1 * time.Hour),
 	}
@@ -240,7 +240,7 @@ func TestGetExpiredServers(t *testing.T) {
 			ID:            "expired-1",
 			Name:          "Expired Server 1",
 			IPv6:          "2001:db8::1",
-			State:         "booted",
+			State:         "running",
 			ProvisionedAt: now.Add(-2 * time.Hour),
 			DeletionAt:    now.Add(-1 * time.Hour), // Expired
 		},
@@ -248,7 +248,7 @@ func TestGetExpiredServers(t *testing.T) {
 			ID:            "expired-2",
 			Name:          "Expired Server 2",
 			IPv6:          "2001:db8::2",
-			State:         "booted",
+			State:         "running",
 			ProvisionedAt: now.Add(-3 * time.Hour),
 			DeletionAt:    now.Add(-30 * time.Minute), // Expired
 		},
@@ -256,7 +256,7 @@ func TestGetExpiredServers(t *testing.T) {
 			ID:            "active-1",
 			Name:          "Active Server",
 			IPv6:          "2001:db8::3",
-			State:         "booted",
+			State:         "running",
 			ProvisionedAt: now,
 			DeletionAt:    now.Add(1 * time.Hour), // Not expired
 		},
@@ -333,7 +333,7 @@ func TestConcurrentOperations(t *testing.T) {
 				ID:            fmt.Sprintf("concurrent-%d", id),
 				Name:          fmt.Sprintf("Server %d", id),
 				IPv6:          fmt.Sprintf("2001:db8::%d", id),
-				State:         "booted",
+				State:         "running",
 				ProvisionedAt: now,
 				DeletionAt:    now.Add(1 * time.Hour),
 			}

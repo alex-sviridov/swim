@@ -104,12 +104,12 @@ func (m *mockServer) String() string {
 
 // Mock Redis Client
 type mockRedisClient struct {
-	mu               sync.Mutex
-	serverStates     map[string]redis.ServerState
-	pushStateFunc    func(ctx context.Context, key string, state redis.ServerState, ttl time.Duration) error
-	getStateFunc     func(ctx context.Context, key string) (*redis.ServerState, error)
-	popPayloadFunc   func(ctx context.Context, key string, timeout time.Duration) (string, error)
-	getExpiredFunc   func(ctx context.Context, prefix string) ([]redis.ServerState, error)
+	mu             sync.Mutex
+	serverStates   map[string]redis.ServerState
+	pushStateFunc  func(ctx context.Context, key string, state redis.ServerState, ttl time.Duration) error
+	getStateFunc   func(ctx context.Context, key string) (*redis.ServerState, error)
+	popPayloadFunc func(ctx context.Context, key string, timeout time.Duration) (string, error)
+	getExpiredFunc func(ctx context.Context, prefix string) ([]redis.ServerState, error)
 }
 
 func newMockRedisClient() *mockRedisClient {
@@ -212,7 +212,7 @@ func TestCleanupExpiredServers(t *testing.T) {
 			ID:            "expired-1",
 			Name:          "Expired Server 1",
 			IPv6:          "2001:db8::1",
-			State:         config.StateBooted,
+			State:         config.StateRunning,
 			ProvisionedAt: now.Add(-2 * time.Hour),
 			DeletionAt:    now.Add(-1 * time.Hour),
 		},
@@ -220,7 +220,7 @@ func TestCleanupExpiredServers(t *testing.T) {
 			ID:            "expired-2",
 			Name:          "Expired Server 2",
 			IPv6:          "2001:db8::2",
-			State:         config.StateBooted,
+			State:         config.StateRunning,
 			ProvisionedAt: now.Add(-3 * time.Hour),
 			DeletionAt:    now.Add(-30 * time.Minute),
 		},
@@ -237,7 +237,7 @@ func TestCleanupExpiredServers(t *testing.T) {
 			id:        id,
 			name:      "test-server",
 			ipv6:      "2001:db8::1",
-			state:     config.StateBooted,
+			state:     config.StateRunning,
 			connector: conn,
 		}, nil
 	}
@@ -284,7 +284,7 @@ func TestCleanupExpiredServersGetServerFails(t *testing.T) {
 		ID:            "expired-1",
 		Name:          "Expired Server 1",
 		IPv6:          "2001:db8::1",
-		State:         config.StateBooted,
+		State:         config.StateRunning,
 		ProvisionedAt: now.Add(-2 * time.Hour),
 		DeletionAt:    now.Add(-1 * time.Hour),
 	}
@@ -320,7 +320,7 @@ func TestCleanupExpiredServersDeleteFails(t *testing.T) {
 		ID:            "expired-1",
 		Name:          "Expired Server 1",
 		IPv6:          "2001:db8::1",
-		State:         config.StateBooted,
+		State:         config.StateRunning,
 		ProvisionedAt: now.Add(-2 * time.Hour),
 		DeletionAt:    now.Add(-1 * time.Hour),
 	}
@@ -410,7 +410,7 @@ func TestDeleteExpiredServer(t *testing.T) {
 		ID:            "test-server",
 		Name:          "Test Server",
 		IPv6:          "2001:db8::1",
-		State:         config.StateBooted,
+		State:         config.StateRunning,
 		ProvisionedAt: now.Add(-2 * time.Hour),
 		DeletionAt:    now.Add(-1 * time.Hour),
 	}
@@ -449,7 +449,7 @@ func TestCleanupWithContextCancellation(t *testing.T) {
 			ID:            string(rune('a' + i)),
 			Name:          "Test Server",
 			IPv6:          "2001:db8::1",
-			State:         config.StateBooted,
+			State:         config.StateRunning,
 			ProvisionedAt: now.Add(-2 * time.Hour),
 			DeletionAt:    now.Add(-1 * time.Hour),
 		}
@@ -482,7 +482,7 @@ func TestCleanupMultipleConcurrentDeletes(t *testing.T) {
 			ID:            string(rune('a' + i)),
 			Name:          "Test Server",
 			IPv6:          "2001:db8::1",
-			State:         config.StateBooted,
+			State:         config.StateRunning,
 			ProvisionedAt: now.Add(-2 * time.Hour),
 			DeletionAt:    now.Add(-1 * time.Hour),
 		}
@@ -495,7 +495,7 @@ func TestCleanupMultipleConcurrentDeletes(t *testing.T) {
 			id:        id,
 			name:      "test-server",
 			ipv6:      "2001:db8::1",
-			state:     config.StateBooted,
+			state:     config.StateRunning,
 			connector: conn,
 		}, nil
 	}

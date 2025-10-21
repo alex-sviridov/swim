@@ -171,7 +171,7 @@ func TestProcessRequestSuccess(t *testing.T) {
 		id:           "server-123",
 		name:         "test-server",
 		ipv6:         "2001:db8::1",
-		stateChanges: []string{"starting", "starting", config.StateBooted},
+		stateChanges: []string{"starting", "starting", config.StateRunning},
 	}
 
 	conn := &mockConnector{
@@ -276,7 +276,7 @@ func TestProcessRequestCacheFailure(t *testing.T) {
 		id:    "server-123",
 		name:  "test-server",
 		ipv6:  "2001:db8::1",
-		state: config.StateBooted,
+		state: config.StateRunning,
 	}
 
 	conn := &mockConnector{
@@ -513,7 +513,7 @@ func TestTTLParsing(t *testing.T) {
 				id:    "server-123",
 				name:  "test-server",
 				ipv6:  "2001:db8::1",
-				state: config.StateBooted,
+				state: config.StateRunning,
 			}
 
 			conn := &mockConnector{

@@ -91,7 +91,7 @@ func (p *Provisioner) ProcessRequest(ctx context.Context, payload string) {
 	p.pollServerState(ctx, server, cacheKey, serverState, state)
 }
 
-// pollServerState polls for server state changes until booted or timeout
+// pollServerState polls for server state changes until running or timeout
 func (p *Provisioner) pollServerState(ctx context.Context, server connector.Server, cacheKey string, serverState redis.ServerState, initialState string) {
 	serverLog := p.log.With("server_id", server.GetID())
 
@@ -133,7 +133,7 @@ func (p *Provisioner) pollServerState(ctx context.Context, server connector.Serv
 			}
 
 			// Exit if server is running
-			if currentState == config.StateBooted {
+			if currentState == config.StateRunning {
 				serverLog.Info("server is running, stopping state polling")
 				return
 			}

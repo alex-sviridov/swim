@@ -17,9 +17,9 @@ func TestConstants(t *testing.T) {
 			expected: "swim:server:",
 		},
 		{
-			name:     "StateBooted",
-			got:      StateBooted,
-			expected: "booted",
+			name:     "StateRunning",
+			got:      StateRunning,
+			expected: "running",
 		},
 		{
 			name:     "StateDeletedError",
@@ -30,6 +30,26 @@ func TestConstants(t *testing.T) {
 			name:     "ServerCacheTTL",
 			got:      ServerCacheTTL,
 			expected: 24 * time.Hour,
+		},
+		{
+			name:     "MaxRetryAttempts",
+			got:      MaxRetryAttempts,
+			expected: 5,
+		},
+		{
+			name:     "InitialRetryDelay",
+			got:      InitialRetryDelay,
+			expected: 5 * time.Second,
+		},
+		{
+			name:     "MaxRetryDelay",
+			got:      MaxRetryDelay,
+			expected: 60 * time.Second,
+		},
+		{
+			name:     "RetryBackoffMultiple",
+			got:      RetryBackoffMultiple,
+			expected: 2,
 		},
 	}
 

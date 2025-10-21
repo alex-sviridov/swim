@@ -1,16 +1,16 @@
-# SWIM - ScaleWay Instance Manager
+# SWIM - Hetzner Cloud Instance Manager
 
-Automated provisioning system for short-lived VM instances in Scaleway cloud. Part of linux-lab project.
+Automated provisioning system for short-lived VM instances in Hetzner Cloud. Part of linux-lab project.
 
 ## Purpose
 
-SWIM provisions temporary Scaleway VMs with automatic TTL-based cleanup. It operates in service mode, continuously monitoring a Redis queue for provisioning requests and managing the full lifecycle of instances.
+SWIM provisions temporary Hetzner Cloud VMs with automatic TTL-based cleanup. It operates in service mode, continuously monitoring a Redis queue for provisioning requests and managing the full lifecycle of instances.
 
 ## Workflow
 
 ### Provisioning
 1. **Request Submission**: Push provisioning requests to Redis queue
-2. **Provisioning**: SWIM picks up requests, creates Scaleway instances with cloud-init
+2. **Provisioning**: SWIM picks up requests, creates Hetzner Cloud servers with cloud-init
 3. **State Tracking**: Server states cached in Redis with deletion timestamps
 4. **Cleanup**: Automatic deletion when TTL expires
 5. **Error Handling**: Failed provisions trigger automatic cleanup and error state caching
@@ -50,11 +50,7 @@ redis-cli -a $REDIS_PASSWORD LPUSH swim:decomission:queue '{"WebUsername":"test-
 ## Configuration
 
 ### Required Environment Variables
-- `SCW_ACCESS_KEY` - Scaleway API access key
-- `SCW_SECRET_KEY` - Scaleway API secret key
-- `SCW_ORGANIZATION_ID` - Scaleway organization ID
-- `SCW_PROJECT_ID` - Scaleway project ID
-- `SCW_DEFAULT_ZONE` - Default zone (e.g., `fr-par-1`)
+- `HCLOUD_TOKEN` - Hetzner Cloud API token
 
 ### Optional Environment Variables
 
@@ -63,9 +59,11 @@ redis-cli -a $REDIS_PASSWORD LPUSH swim:decomission:queue '{"WebUsername":"test-
 - `REDIS_PASSWORD` - Redis authentication password
 
 **Provisioning Defaults** (can be overridden in request, request values take priority):
-- `SWIM_PROVISION_DEFAULT_SECURITY_GROUP` - Default security group for instances
-- `SWIM_PROVISION_DEFAULT_IMAGE_ID` - Default Scaleway image ID
-- `SWIM_PROVISION_DEFAULT_INSTANCE_TYPE` - Default instance type (e.g., `DEV1-S`)
+- `HCLOUD_DEFAULT_IMAGE` - Default image ID (e.g., `ubuntu-22.04`)
+- `HCLOUD_DEFAULT_SERVER_TYPE` - Default server type (e.g., `cx11`, `cx21`, `cx31`)
+- `HCLOUD_DEFAULT_LOCATION` - Default location (e.g., `nbg1`, `fsn1`, `hel1`)
+- `HCLOUD_DEFAULT_FIREWALL` - Default firewall ID
+- `HCLOUD_DEFAULT_SSH_KEY` - Default SSH key name or ID
 
 ## Request Format
 
@@ -82,9 +80,11 @@ redis-cli -a $REDIS_PASSWORD LPUSH swim:decomission:queue '{"WebUsername":"test-
 ```
 
 **Optional fields** (override environment defaults):
-- `SecurityGroupName` - Security group name
-- `ImageID` - Scaleway image ID
-- `InstanceType` - Instance type (e.g., `DEV1-S`, `DEV1-M`)
+- `ServerType` - Server type (e.g., `cx11`, `cx21`, `cx31`)
+- `FirewallID` - Firewall ID
+- `ImageID` - Image ID (e.g., `ubuntu-22.04`)
+- `Location` - Location (e.g., `nbg1`, `fsn1`, `hel1`)
+- `SSHKey` - SSH key name or ID
 
 ### Decommissioning Request
 
