@@ -4,7 +4,12 @@
       "Bash(mkdir:*)",
       "Bash(cp:*)",
       "Bash(wsl bash -c:*)",
-      "Bash(go test ./internal/provisioner/... ./internal/cleanup/... ./internal/decommissioner/... -v)"
+      "Bash(go test ./internal/provisioner/... ./internal/cleanup/... ./internal/decommissioner/... -v)",
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(find:*)",
+      "Bash(docker-compose:*)",
+      "Bash(go tool cover:*)"
     ],
     "deny": [],
     "ask": []

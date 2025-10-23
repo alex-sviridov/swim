@@ -12,11 +12,12 @@ import (
 // ClientInterface defines the interface for Redis operations
 type ClientInterface interface {
 	PopPayload(ctx context.Context, queueKey string, timeout time.Duration) (string, error)
+	PushPayload(ctx context.Context, queueKey string, payload string) error
 	PushServerState(ctx context.Context, cacheKey string, state ServerState, ttl time.Duration) error
 	GetServerState(ctx context.Context, cacheKey string) (*ServerState, error)
-	GetExpiredServers(ctx context.Context, prefix string) ([]ServerState, error)
-	GetServersByFilter(ctx context.Context, prefix string, username string, labID *int) ([]ServerState, error)
+	GetAllServerStates(ctx context.Context, prefix string) ([]ServerState, error)
 	DeleteServerState(ctx context.Context, cacheKey string) error
+	TryAcquireRateLimit(ctx context.Context, webUserID string, operation string, ttl time.Duration) (bool, error)
 	Close() error
 }
 
@@ -59,15 +60,17 @@ func (c *Client) Close() error {
 }
 
 // ServerState represents the provisioned server state to cache
+// This is the format expected by LabMan with additional internal fields
 type ServerState struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	IPv6          string    `json:"ipv6"`
-	State         string    `json:"state"`
-	ProvisionedAt time.Time `json:"provisioned_at"`
-	DeletionAt    time.Time `json:"deletion_at"`
-	WebUsername   string    `json:"webusername"`
-	LabID         int       `json:"labid"`
+	User        string    `json:"user"`        // SSH username (e.g., "student")
+	Address     string    `json:"address"`     // IPv6 address for SSH connection
+	Status      string    `json:"status"`      // "provisioning" | "running" | "stopping" (normalized status)
+	Available   bool      `json:"available"`   // true if server is ready for SSH connections (status == "running" for most providers)
+	CloudStatus string    `json:"cloudStatus"` // Raw cloud provider status (e.g., "running", "starting", "initializing" from Hetzner)
+	ServerID    string    `json:"serverId"`    // Internal: cloud provider server ID for deletion
+	ExpiresAt   time.Time `json:"expiresAt"`   // Internal: timestamp for cleanup worker
+	WebUserID   string    `json:"webUserId"`   // Internal: for cleanup to create decommission request
+	LabID       int       `json:"labId"`       // Internal: for cleanup to create decommission request
 }
 
 // PopPayload pops a payload from the queue (blocking)
@@ -88,9 +91,18 @@ func (c *Client) PopPayload(ctx context.Context, queueKey string, timeout time.D
 	return result[1], nil
 }
 
-// ServerCacheKey constructs a cache key for a server ID
-func ServerCacheKey(serverID string) string {
-	return fmt.Sprintf("swim:server:%s", serverID)
+// PushPayload pushes a payload to the queue
+func (c *Client) PushPayload(ctx context.Context, queueKey string, payload string) error {
+	if err := c.client.RPush(ctx, queueKey, payload).Err(); err != nil {
+		return fmt.Errorf("failed to push to queue: %w", err)
+	}
+	return nil
+}
+
+// ServerCacheKey constructs a cache key for a webuserid
+// Note: labId is stored in the ServerState struct, not in the cache key
+func ServerCacheKey(webuserid string) string {
+	return fmt.Sprintf("vmmanager:servers:%s", webuserid)
 }
 
 // PushServerState pushes the provisioned server state to Redis cache
@@ -125,10 +137,9 @@ func (c *Client) GetServerState(ctx context.Context, cacheKey string) (*ServerSt
 	return &state, nil
 }
 
-// GetExpiredServers returns server states where deletion_at is in the past
-func (c *Client) GetExpiredServers(ctx context.Context, prefix string) ([]ServerState, error) {
-	var expired []ServerState
-	now := time.Now()
+// GetAllServerStates returns all server states with the given prefix
+func (c *Client) GetAllServerStates(ctx context.Context, prefix string) ([]ServerState, error) {
+	var states []ServerState
 
 	iter := c.client.Scan(ctx, 0, prefix+"*", 0).Iterator()
 	for iter.Next(ctx) {
@@ -140,50 +151,14 @@ func (c *Client) GetExpiredServers(ctx context.Context, prefix string) ([]Server
 			continue
 		}
 
-		if state.DeletionAt.Before(now) {
-			expired = append(expired, *state)
-		}
+		states = append(states, *state)
 	}
 
 	if err := iter.Err(); err != nil {
 		return nil, fmt.Errorf("scan failed: %w", err)
 	}
 
-	return expired, nil
-}
-
-// GetServersByFilter returns servers filtered by username and optionally labID
-func (c *Client) GetServersByFilter(ctx context.Context, prefix string, username string, labID *int) ([]ServerState, error) {
-	var filtered []ServerState
-
-	iter := c.client.Scan(ctx, 0, prefix+"*", 0).Iterator()
-	for iter.Next(ctx) {
-		key := iter.Val()
-		state, err := c.GetServerState(ctx, key)
-		if err != nil {
-			// Log scan error for visibility but continue processing other keys
-			fmt.Printf("warning: failed to get server state for key %s: %v\n", key, err)
-			continue
-		}
-
-		// Filter by username (required)
-		if state.WebUsername != username {
-			continue
-		}
-
-		// Filter by labID if provided
-		if labID != nil && state.LabID != *labID {
-			continue
-		}
-
-		filtered = append(filtered, *state)
-	}
-
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("scan failed: %w", err)
-	}
-
-	return filtered, nil
+	return states, nil
 }
 
 // DeleteServerState removes a server state from Redis cache
@@ -192,4 +167,25 @@ func (c *Client) DeleteServerState(ctx context.Context, cacheKey string) error {
 		return fmt.Errorf("failed to delete cache key: %w", err)
 	}
 	return nil
+}
+
+// RateLimitKey constructs a rate limit key for a user and operation
+func RateLimitKey(webUserID string, operation string) string {
+	return fmt.Sprintf("vmmanager:ratelimit:%s:%s", webUserID, operation)
+}
+
+// TryAcquireRateLimit attempts to acquire a rate limit lock atomically.
+// Returns true if rate limit was acquired (proceed with operation).
+// Returns false if rate limited (drop the message).
+// Uses Redis SET NX for atomic operation.
+func (c *Client) TryAcquireRateLimit(ctx context.Context, webUserID string, operation string, ttl time.Duration) (bool, error) {
+	key := RateLimitKey(webUserID, operation)
+
+	// Atomic SET NX with TTL - only succeeds if key doesn't exist
+	success, err := c.client.SetNX(ctx, key, "1", ttl).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to acquire rate limit: %w", err)
+	}
+
+	return success, nil
 }

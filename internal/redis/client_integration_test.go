@@ -93,30 +93,30 @@ func TestNewClient(t *testing.T) {
 
 func TestServerCacheKey(t *testing.T) {
 	tests := []struct {
-		name     string
-		serverID string
-		want     string
+		name      string
+		webUserID string
+		want      string
 	}{
 		{
-			name:     "simple id",
-			serverID: "server-123",
-			want:     "swim:server:server-123",
+			name:      "simple user id",
+			webUserID: "user-123",
+			want:      "vmmanager:servers:user-123",
 		},
 		{
-			name:     "uuid",
-			serverID: "550e8400-e29b-41d4-a716-446655440000",
-			want:     "swim:server:550e8400-e29b-41d4-a716-446655440000",
+			name:      "uuid",
+			webUserID: "550e8400-e29b-41d4-a716-446655440000",
+			want:      "vmmanager:servers:550e8400-e29b-41d4-a716-446655440000",
 		},
 		{
-			name:     "empty id",
-			serverID: "",
-			want:     "swim:server:",
+			name:      "empty id",
+			webUserID: "",
+			want:      "vmmanager:servers:",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ServerCacheKey(tt.serverID)
+			got := ServerCacheKey(tt.webUserID)
 			if got != tt.want {
 				t.Errorf("ServerCacheKey() = %v, want %v", got, tt.want)
 			}
@@ -132,15 +132,18 @@ func TestPushAndGetServerState(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second) // Truncate for comparison
 
 	state := ServerState{
-		ID:            "test-server-1",
-		Name:          "test-server",
-		IPv6:          "2001:db8::1",
-		State:         "running",
-		ProvisionedAt: now,
-		DeletionAt:    now.Add(1 * time.Hour),
+		User:        "student",
+		Address:     "2001:db8::1",
+		Status:      "running",
+		Available:   true,
+		CloudStatus: "running",
+		ServerID:    "test-server-1",
+		ExpiresAt:   now.Add(1 * time.Hour),
+		WebUserID:   "user-123",
+		LabID:       5,
 	}
 
-	cacheKey := ServerCacheKey(state.ID)
+	cacheKey := ServerCacheKey(state.WebUserID)
 
 	// Push state
 	err := client.PushServerState(ctx, cacheKey, state, 10*time.Minute)
@@ -155,23 +158,32 @@ func TestPushAndGetServerState(t *testing.T) {
 	}
 
 	// Verify state
-	if retrieved.ID != state.ID {
-		t.Errorf("ID = %v, want %v", retrieved.ID, state.ID)
+	if retrieved.User != state.User {
+		t.Errorf("User = %v, want %v", retrieved.User, state.User)
 	}
-	if retrieved.Name != state.Name {
-		t.Errorf("Name = %v, want %v", retrieved.Name, state.Name)
+	if retrieved.Address != state.Address {
+		t.Errorf("Address = %v, want %v", retrieved.Address, state.Address)
 	}
-	if retrieved.IPv6 != state.IPv6 {
-		t.Errorf("IPv6 = %v, want %v", retrieved.IPv6, state.IPv6)
+	if retrieved.Status != state.Status {
+		t.Errorf("Status = %v, want %v", retrieved.Status, state.Status)
 	}
-	if retrieved.State != state.State {
-		t.Errorf("State = %v, want %v", retrieved.State, state.State)
+	if retrieved.Available != state.Available {
+		t.Errorf("Available = %v, want %v", retrieved.Available, state.Available)
 	}
-	if !retrieved.ProvisionedAt.Equal(state.ProvisionedAt) {
-		t.Errorf("ProvisionedAt = %v, want %v", retrieved.ProvisionedAt, state.ProvisionedAt)
+	if retrieved.CloudStatus != state.CloudStatus {
+		t.Errorf("CloudStatus = %v, want %v", retrieved.CloudStatus, state.CloudStatus)
 	}
-	if !retrieved.DeletionAt.Equal(state.DeletionAt) {
-		t.Errorf("DeletionAt = %v, want %v", retrieved.DeletionAt, state.DeletionAt)
+	if retrieved.ServerID != state.ServerID {
+		t.Errorf("ServerID = %v, want %v", retrieved.ServerID, state.ServerID)
+	}
+	if retrieved.WebUserID != state.WebUserID {
+		t.Errorf("WebUserID = %v, want %v", retrieved.WebUserID, state.WebUserID)
+	}
+	if retrieved.LabID != state.LabID {
+		t.Errorf("LabID = %v, want %v", retrieved.LabID, state.LabID)
+	}
+	if !retrieved.ExpiresAt.Truncate(time.Second).Equal(state.ExpiresAt) {
+		t.Errorf("ExpiresAt = %v, want %v", retrieved.ExpiresAt, state.ExpiresAt)
 	}
 }
 
@@ -180,7 +192,7 @@ func TestGetServerStateNotFound(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	cacheKey := ServerCacheKey("nonexistent-server")
+	cacheKey := ServerCacheKey("nonexistent-user")
 
 	_, err := client.GetServerState(ctx, cacheKey)
 	if err == nil {
@@ -227,92 +239,78 @@ func TestPopPayloadTimeout(t *testing.T) {
 	}
 }
 
-func TestGetExpiredServers(t *testing.T) {
+func TestGetAllServerStates(t *testing.T) {
 	client, cleanup := setupTestRedis(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	// Create test servers
+	// Create test servers for different users
 	states := []ServerState{
 		{
-			ID:            "expired-1",
-			Name:          "Expired Server 1",
-			IPv6:          "2001:db8::1",
-			State:         "running",
-			ProvisionedAt: now.Add(-2 * time.Hour),
-			DeletionAt:    now.Add(-1 * time.Hour), // Expired
+			User:        "student",
+			Address:     "2001:db8::1",
+			Status:      "running",
+			Available:   true,
+			CloudStatus: "running",
+			ServerID:    "server-1",
+			ExpiresAt:   now.Add(1 * time.Hour),
+			WebUserID:   "user-1",
+			LabID:       5,
 		},
 		{
-			ID:            "expired-2",
-			Name:          "Expired Server 2",
-			IPv6:          "2001:db8::2",
-			State:         "running",
-			ProvisionedAt: now.Add(-3 * time.Hour),
-			DeletionAt:    now.Add(-30 * time.Minute), // Expired
+			User:        "student",
+			Address:     "2001:db8::2",
+			Status:      "running",
+			Available:   true,
+			CloudStatus: "running",
+			ServerID:    "server-2",
+			ExpiresAt:   now.Add(2 * time.Hour),
+			WebUserID:   "user-2",
+			LabID:       3,
 		},
 		{
-			ID:            "active-1",
-			Name:          "Active Server",
-			IPv6:          "2001:db8::3",
-			State:         "running",
-			ProvisionedAt: now,
-			DeletionAt:    now.Add(1 * time.Hour), // Not expired
+			User:        "student",
+			Address:     "2001:db8::3",
+			Status:      "provisioning",
+			Available:   false,
+			CloudStatus: "starting",
+			ServerID:    "server-3",
+			ExpiresAt:   now.Add(1 * time.Hour),
+			WebUserID:   "user-3",
+			LabID:       7,
 		},
 	}
 
 	// Push all states
 	for _, state := range states {
-		cacheKey := ServerCacheKey(state.ID)
+		cacheKey := ServerCacheKey(state.WebUserID)
 		err := client.PushServerState(ctx, cacheKey, state, 10*time.Minute)
 		if err != nil {
 			t.Fatalf("Failed to push state: %v", err)
 		}
 	}
 
-	// Get expired servers
-	expired, err := client.GetExpiredServers(ctx, "swim:server:")
+	// Get all server states
+	allStates, err := client.GetAllServerStates(ctx, "vmmanager:servers:")
 	if err != nil {
-		t.Fatalf("GetExpiredServers failed: %v", err)
+		t.Fatalf("GetAllServerStates failed: %v", err)
 	}
 
-	// Verify we got exactly 2 expired servers
-	if len(expired) != 2 {
-		t.Errorf("Expected 2 expired servers, got %d", len(expired))
+	// Verify we got all 3 servers
+	if len(allStates) != 3 {
+		t.Errorf("Expected 3 servers, got %d", len(allStates))
 	}
 
-	// Verify expired server IDs
-	expiredIDs := make(map[string]bool)
-	for _, state := range expired {
-		expiredIDs[state.ID] = true
+	// Verify server data
+	userIDs := make(map[string]bool)
+	for _, state := range allStates {
+		userIDs[state.WebUserID] = true
 	}
 
-	if !expiredIDs["expired-1"] {
-		t.Error("Expected expired-1 in results")
-	}
-	if !expiredIDs["expired-2"] {
-		t.Error("Expected expired-2 in results")
-	}
-	if expiredIDs["active-1"] {
-		t.Error("Active server should not be in expired results")
-	}
-}
-
-func TestGetExpiredServersEmpty(t *testing.T) {
-	client, cleanup := setupTestRedis(t)
-	defer cleanup()
-
-	ctx := context.Background()
-
-	// Get expired servers from empty database
-	expired, err := client.GetExpiredServers(ctx, "swim:server:")
-	if err != nil {
-		t.Fatalf("GetExpiredServers failed: %v", err)
-	}
-
-	if len(expired) != 0 {
-		t.Errorf("Expected 0 expired servers, got %d", len(expired))
+	if !userIDs["user-1"] || !userIDs["user-2"] || !userIDs["user-3"] {
+		t.Error("Missing expected users in results")
 	}
 }
 
@@ -323,22 +321,25 @@ func TestConcurrentOperations(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	// Test concurrent writes
+	// Test concurrent writes for different users
 	done := make(chan bool)
 	errors := make(chan error, 10)
 
 	for i := 0; i < 10; i++ {
 		go func(id int) {
 			state := ServerState{
-				ID:            fmt.Sprintf("concurrent-%d", id),
-				Name:          fmt.Sprintf("Server %d", id),
-				IPv6:          fmt.Sprintf("2001:db8::%d", id),
-				State:         "running",
-				ProvisionedAt: now,
-				DeletionAt:    now.Add(1 * time.Hour),
+				User:        "student",
+				Address:     fmt.Sprintf("2001:db8::%d", id),
+				Status:      "running",
+				Available:   true,
+				CloudStatus: "running",
+				ServerID:    fmt.Sprintf("server-%d", id),
+				ExpiresAt:   now.Add(1 * time.Hour),
+				WebUserID:   fmt.Sprintf("concurrent-user-%d", id),
+				LabID:       id + 1,
 			}
 
-			cacheKey := ServerCacheKey(state.ID)
+			cacheKey := ServerCacheKey(state.WebUserID)
 			err := client.PushServerState(ctx, cacheKey, state, 5*time.Minute)
 			if err != nil {
 				errors <- err
@@ -361,13 +362,13 @@ func TestConcurrentOperations(t *testing.T) {
 	}
 
 	// Verify all states were written
-	expired, err := client.GetExpiredServers(ctx, "swim:server:")
+	allStates, err := client.GetAllServerStates(ctx, "vmmanager:servers:")
 	if err != nil {
-		t.Fatalf("GetExpiredServers failed: %v", err)
+		t.Fatalf("GetAllServerStates failed: %v", err)
 	}
 
-	// We should find 0 expired (all have future deletion times)
-	if len(expired) != 0 {
-		t.Errorf("Expected 0 expired servers, got %d", len(expired))
+	// We should have 10 states
+	if len(allStates) != 10 {
+		t.Errorf("Expected 10 servers, got %d", len(allStates))
 	}
 }

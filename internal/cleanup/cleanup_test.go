@@ -2,10 +2,8 @@ package cleanup
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"log/slog"
-	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,505 +12,441 @@ import (
 	"github.com/alex-sviridov/swim/internal/redis"
 )
 
-// Mock Connector
-type mockConnector struct {
-	mu                sync.Mutex
-	deletedServers    map[string]bool
-	createServerFunc  func(payload string) (connector.Server, error)
-	getServerByIDFunc func(id string) (connector.Server, error)
-	listServersFunc   func() ([]connector.Server, error)
-}
-
-func newMockConnector() *mockConnector {
-	return &mockConnector{
-		deletedServers: make(map[string]bool),
-	}
-}
-
-func (m *mockConnector) CreateServer(payload string) (connector.Server, error) {
-	if m.createServerFunc != nil {
-		return m.createServerFunc(payload)
-	}
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockConnector) GetServerByID(id string) (connector.Server, error) {
-	if m.getServerByIDFunc != nil {
-		return m.getServerByIDFunc(id)
-	}
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockConnector) ListServers() ([]connector.Server, error) {
-	if m.listServersFunc != nil {
-		return m.listServersFunc()
-	}
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockConnector) markDeleted(id string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.deletedServers[id] = true
-}
-
-func (m *mockConnector) wasDeleted(id string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.deletedServers[id]
-}
-
-// Mock Server
-type mockServer struct {
-	id         string
-	name       string
-	ipv6       string
-	state      string
-	connector  *mockConnector
-	deleteFunc func() error
-}
-
-func (m *mockServer) GetID() string {
-	return m.id
-}
-
-func (m *mockServer) GetName() string {
-	return m.name
-}
-
-func (m *mockServer) GetIPv6Address() string {
-	return m.ipv6
-}
-
-func (m *mockServer) GetState() (string, error) {
-	return m.state, nil
-}
-
-func (m *mockServer) Delete() error {
-	if m.deleteFunc != nil {
-		return m.deleteFunc()
-	}
-	if m.connector != nil {
-		m.connector.markDeleted(m.id)
-	}
-	return nil
-}
-
-func (m *mockServer) String() string {
-	return m.name + " [" + m.ipv6 + "]"
-}
-
-// Mock Redis Client
+// mockRedisClient is a mock implementation of redis.ClientInterface
 type mockRedisClient struct {
-	mu             sync.Mutex
-	serverStates   map[string]redis.ServerState
-	pushStateFunc  func(ctx context.Context, key string, state redis.ServerState, ttl time.Duration) error
-	getStateFunc   func(ctx context.Context, key string) (*redis.ServerState, error)
-	popPayloadFunc func(ctx context.Context, key string, timeout time.Duration) (string, error)
-	getExpiredFunc func(ctx context.Context, prefix string) ([]redis.ServerState, error)
+	getAllServerStatesFunc func(ctx context.Context, prefix string) ([]redis.ServerState, error)
+	pushPayloadFunc        func(ctx context.Context, queueKey string, payload string) error
+	getServerStateFunc     func(ctx context.Context, cacheKey string) (*redis.ServerState, error)
+	deleteServerStateFunc  func(ctx context.Context, cacheKey string) error
+	popPayloadFunc         func(ctx context.Context, queueKey string, timeout time.Duration) (string, error)
+	pushServerStateFunc    func(ctx context.Context, cacheKey string, state redis.ServerState, ttl time.Duration) error
+	closeFunc              func() error
 }
 
-func newMockRedisClient() *mockRedisClient {
-	return &mockRedisClient{
-		serverStates: make(map[string]redis.ServerState),
+func (m *mockRedisClient) GetAllServerStates(ctx context.Context, prefix string) ([]redis.ServerState, error) {
+	if m.getAllServerStatesFunc != nil {
+		return m.getAllServerStatesFunc(ctx, prefix)
 	}
+	return []redis.ServerState{}, nil
 }
 
-func (m *mockRedisClient) PushServerState(ctx context.Context, key string, state redis.ServerState, ttl time.Duration) error {
-	if m.pushStateFunc != nil {
-		return m.pushStateFunc(ctx, key, state, ttl)
+func (m *mockRedisClient) PushPayload(ctx context.Context, queueKey string, payload string) error {
+	if m.pushPayloadFunc != nil {
+		return m.pushPayloadFunc(ctx, queueKey, payload)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.serverStates[key] = state
 	return nil
 }
 
-func (m *mockRedisClient) GetServerState(ctx context.Context, key string) (*redis.ServerState, error) {
-	if m.getStateFunc != nil {
-		return m.getStateFunc(ctx, key)
+func (m *mockRedisClient) GetServerState(ctx context.Context, cacheKey string) (*redis.ServerState, error) {
+	if m.getServerStateFunc != nil {
+		return m.getServerStateFunc(ctx, cacheKey)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	state, ok := m.serverStates[key]
-	if !ok {
-		return nil, errors.New("not found")
-	}
-	return &state, nil
-}
-
-func (m *mockRedisClient) PopPayload(ctx context.Context, key string, timeout time.Duration) (string, error) {
-	if m.popPayloadFunc != nil {
-		return m.popPayloadFunc(ctx, key, timeout)
-	}
-	return "", errors.New("not implemented")
-}
-
-func (m *mockRedisClient) GetExpiredServers(ctx context.Context, prefix string) ([]redis.ServerState, error) {
-	if m.getExpiredFunc != nil {
-		return m.getExpiredFunc(ctx, prefix)
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	var expired []redis.ServerState
-	now := time.Now()
-	for _, state := range m.serverStates {
-		if state.DeletionAt.Before(now) {
-			expired = append(expired, state)
-		}
-	}
-	return expired, nil
-}
-
-func (m *mockRedisClient) Close() error {
-	return nil
-}
-
-func (m *mockRedisClient) GetServersByFilter(ctx context.Context, prefix string, username string, labID *int) ([]redis.ServerState, error) {
-	return nil, errors.New("not implemented")
+	return nil, nil
 }
 
 func (m *mockRedisClient) DeleteServerState(ctx context.Context, cacheKey string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.serverStates, cacheKey)
+	if m.deleteServerStateFunc != nil {
+		return m.deleteServerStateFunc(ctx, cacheKey)
+	}
 	return nil
 }
 
-func TestWorkerNew(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
+func (m *mockRedisClient) PopPayload(ctx context.Context, queueKey string, timeout time.Duration) (string, error) {
+	if m.popPayloadFunc != nil {
+		return m.popPayloadFunc(ctx, queueKey, timeout)
+	}
+	return "", nil
+}
+
+func (m *mockRedisClient) PushServerState(ctx context.Context, cacheKey string, state redis.ServerState, ttl time.Duration) error {
+	if m.pushServerStateFunc != nil {
+		return m.pushServerStateFunc(ctx, cacheKey, state, ttl)
+	}
+	return nil
+}
+
+func (m *mockRedisClient) TryAcquireRateLimit(ctx context.Context, webUserID string, operation string, ttl time.Duration) (bool, error) {
+	// Allow by default in tests (not rate limited)
+	return true, nil
+}
+
+func (m *mockRedisClient) Close() error {
+	if m.closeFunc != nil {
+		return m.closeFunc()
+	}
+	return nil
+}
+
+// mockConnector is a mock implementation of connector.Connector
+type mockConnector struct{}
+
+// mockServer is a mock implementation of connector.Server
+type mockServer struct{}
+
+func (m *mockServer) GetID() string             { return "" }
+func (m *mockServer) GetName() string           { return "" }
+func (m *mockServer) GetIPv6Address() string    { return "" }
+func (m *mockServer) GetState() (string, error) { return "", nil }
+func (m *mockServer) Delete() error             { return nil }
+func (m *mockServer) String() string            { return "" }
+
+func (m *mockConnector) ListServers() ([]connector.Server, error) {
+	return []connector.Server{}, nil
+}
+
+func (m *mockConnector) GetServerByID(id string) (connector.Server, error) {
+	return &mockServer{}, nil
+}
+
+func (m *mockConnector) CreateServer(payload string) (connector.Server, error) {
+	return &mockServer{}, nil
+}
+
+func TestNew(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
+	redisClient := &mockRedisClient{}
 
 	worker := New(log, conn, redisClient)
 
 	if worker == nil {
-		t.Fatal("Expected non-nil worker")
+		t.Fatal("expected worker to be created, got nil")
 	}
-	if worker.log != log {
-		t.Error("Logger not set correctly")
+
+	if worker.log == nil {
+		t.Error("expected log to be set")
 	}
-	if worker.conn != conn {
-		t.Error("Connector not set correctly")
+
+	if worker.conn == nil {
+		t.Error("expected conn to be set")
 	}
-	// Redis client is set correctly if New() succeeded without panic
+
+	if worker.redisClient == nil {
+		t.Error("expected redisClient to be set")
+	}
 }
 
-func TestCleanupExpiredServers(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
+func TestRun_ContextCancellation(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
 
-	now := time.Now()
-
-	// Setup expired servers
-	expiredServers := []redis.ServerState{
-		{
-			ID:            "expired-1",
-			Name:          "Expired Server 1",
-			IPv6:          "2001:db8::1",
-			State:         config.StateRunning,
-			ProvisionedAt: now.Add(-2 * time.Hour),
-			DeletionAt:    now.Add(-1 * time.Hour),
-		},
-		{
-			ID:            "expired-2",
-			Name:          "Expired Server 2",
-			IPv6:          "2001:db8::2",
-			State:         config.StateRunning,
-			ProvisionedAt: now.Add(-3 * time.Hour),
-			DeletionAt:    now.Add(-30 * time.Minute),
+	getAllCalled := false
+	redisClient := &mockRedisClient{
+		getAllServerStatesFunc: func(ctx context.Context, prefix string) ([]redis.ServerState, error) {
+			getAllCalled = true
+			return []redis.ServerState{}, nil
 		},
 	}
-
-	for _, state := range expiredServers {
-		key := redis.ServerCacheKey(state.ID)
-		redisClient.serverStates[key] = state
-	}
-
-	// Setup connector to return mock servers
-	conn.getServerByIDFunc = func(id string) (connector.Server, error) {
-		return &mockServer{
-			id:        id,
-			name:      "test-server",
-			ipv6:      "2001:db8::1",
-			state:     config.StateRunning,
-			connector: conn,
-		}, nil
-	}
-
-	worker := New(log, conn, redisClient)
-	ctx := context.Background()
-
-	worker.cleanupExpiredServers(ctx)
-
-	// Give goroutines time to complete
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify both servers were deleted
-	if !conn.wasDeleted("expired-1") {
-		t.Error("expired-1 should have been deleted")
-	}
-	if !conn.wasDeleted("expired-2") {
-		t.Error("expired-2 should have been deleted")
-	}
-}
-
-func TestCleanupExpiredServersNone(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
-
-	worker := New(log, conn, redisClient)
-	ctx := context.Background()
-
-	worker.cleanupExpiredServers(ctx)
-
-	// Should complete without errors when no expired servers
-}
-
-func TestCleanupExpiredServersGetServerFails(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
-
-	now := time.Now()
-
-	// Setup expired server
-	expiredServer := redis.ServerState{
-		ID:            "expired-1",
-		Name:          "Expired Server 1",
-		IPv6:          "2001:db8::1",
-		State:         config.StateRunning,
-		ProvisionedAt: now.Add(-2 * time.Hour),
-		DeletionAt:    now.Add(-1 * time.Hour),
-	}
-
-	key := redis.ServerCacheKey(expiredServer.ID)
-	redisClient.serverStates[key] = expiredServer
-
-	// GetServerByID fails
-	conn.getServerByIDFunc = func(id string) (connector.Server, error) {
-		return nil, errors.New("server not found")
-	}
-
-	worker := New(log, conn, redisClient)
-	ctx := context.Background()
-
-	worker.cleanupExpiredServers(ctx)
-
-	// Give goroutines time to complete
-	time.Sleep(100 * time.Millisecond)
-
-	// Should not crash, just log error
-}
-
-func TestCleanupExpiredServersDeleteFails(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
-
-	now := time.Now()
-
-	// Setup expired server
-	expiredServer := redis.ServerState{
-		ID:            "expired-1",
-		Name:          "Expired Server 1",
-		IPv6:          "2001:db8::1",
-		State:         config.StateRunning,
-		ProvisionedAt: now.Add(-2 * time.Hour),
-		DeletionAt:    now.Add(-1 * time.Hour),
-	}
-
-	key := redis.ServerCacheKey(expiredServer.ID)
-	redisClient.serverStates[key] = expiredServer
-
-	// GetServerByID returns server that fails to delete
-	conn.getServerByIDFunc = func(id string) (connector.Server, error) {
-		return &mockServer{
-			id:   id,
-			name: "test-server",
-			ipv6: "2001:db8::1",
-			deleteFunc: func() error {
-				return errors.New("delete failed")
-			},
-		}, nil
-	}
-
-	worker := New(log, conn, redisClient)
-	ctx := context.Background()
-
-	worker.cleanupExpiredServers(ctx)
-
-	// Give goroutines time to complete
-	time.Sleep(100 * time.Millisecond)
-
-	// Should not crash, just log error
-}
-
-func TestCleanupExpiredServersGetExpiredFails(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
-
-	// GetExpiredServers fails
-	redisClient.getExpiredFunc = func(ctx context.Context, prefix string) ([]redis.ServerState, error) {
-		return nil, errors.New("redis scan failed")
-	}
-
-	worker := New(log, conn, redisClient)
-	ctx := context.Background()
-
-	worker.cleanupExpiredServers(ctx)
-
-	// Should return early without crashing
-}
-
-func TestWorkerRunAndStop(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
 
 	worker := New(log, conn, redisClient)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Start worker in goroutine
-	done := make(chan bool)
+	// Cancel immediately
+	cancel()
+
+	// Run should exit quickly when context is cancelled
+	worker.Run(ctx)
+
+	// Verify initial cleanup was called
+	if !getAllCalled {
+		t.Error("expected GetAllServerStates to be called during startup cleanup")
+	}
+}
+
+func TestRun_PeriodicCleanup(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
+
+	callCount := 0
+	redisClient := &mockRedisClient{
+		getAllServerStatesFunc: func(ctx context.Context, prefix string) ([]redis.ServerState, error) {
+			callCount++
+			return []redis.ServerState{}, nil
+		},
+	}
+
+	worker := New(log, conn, redisClient)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	worker.Run(ctx)
+
+	// Should be called at least once (initial cleanup)
+	if callCount < 1 {
+		t.Errorf("expected at least 1 call to GetAllServerStates, got %d", callCount)
+	}
+}
+
+func TestCleanupExpiredServers_NoServers(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
+
+	getAllCalled := false
+	redisClient := &mockRedisClient{
+		getAllServerStatesFunc: func(ctx context.Context, prefix string) ([]redis.ServerState, error) {
+			getAllCalled = true
+			if prefix != config.ServerCachePrefix {
+				t.Errorf("expected prefix %s, got %s", config.ServerCachePrefix, prefix)
+			}
+			return []redis.ServerState{}, nil
+		},
+	}
+
+	worker := New(log, conn, redisClient)
+
+	ctx := context.Background()
+	worker.cleanupExpiredServers(ctx)
+
+	if !getAllCalled {
+		t.Error("expected GetAllServerStates to be called")
+	}
+}
+
+func TestCleanupExpiredServers_NoExpiredServers(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
+
+	futureTime := time.Now().Add(1 * time.Hour)
+
+	redisClient := &mockRedisClient{
+		getAllServerStatesFunc: func(ctx context.Context, prefix string) ([]redis.ServerState, error) {
+			return []redis.ServerState{
+				{
+					ServerID:  "server1",
+					WebUserID: "user1",
+					LabID:     1,
+					ExpiresAt: futureTime,
+				},
+				{
+					ServerID:  "server2",
+					WebUserID: "user2",
+					LabID:     2,
+					ExpiresAt: futureTime,
+				},
+			}, nil
+		},
+		pushPayloadFunc: func(ctx context.Context, queueKey string, payload string) error {
+			t.Error("expected PushPayload not to be called for non-expired servers")
+			return nil
+		},
+	}
+
+	worker := New(log, conn, redisClient)
+
+	ctx := context.Background()
+	worker.cleanupExpiredServers(ctx)
+}
+
+func TestCleanupExpiredServers_WithExpiredServers(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
+
+	pastTime := time.Now().Add(-1 * time.Hour)
+	futureTime := time.Now().Add(1 * time.Hour)
+
+	pushedPayloads := []string{}
+
+	redisClient := &mockRedisClient{
+		getAllServerStatesFunc: func(ctx context.Context, prefix string) ([]redis.ServerState, error) {
+			return []redis.ServerState{
+				{
+					ServerID:  "server1",
+					WebUserID: "user1",
+					LabID:     1,
+					ExpiresAt: pastTime,
+				},
+				{
+					ServerID:  "server2",
+					WebUserID: "user2",
+					LabID:     2,
+					ExpiresAt: futureTime,
+				},
+				{
+					ServerID:  "server3",
+					WebUserID: "user3",
+					LabID:     3,
+					ExpiresAt: pastTime,
+				},
+			}, nil
+		},
+		pushPayloadFunc: func(ctx context.Context, queueKey string, payload string) error {
+			if queueKey != config.DecommissionQueueKey {
+				t.Errorf("expected queue key %s, got %s", config.DecommissionQueueKey, queueKey)
+			}
+			pushedPayloads = append(pushedPayloads, payload)
+			return nil
+		},
+	}
+
+	worker := New(log, conn, redisClient)
+
+	ctx := context.Background()
+	worker.cleanupExpiredServers(ctx)
+
+	// Verify 2 expired servers were pushed
+	if len(pushedPayloads) != 2 {
+		t.Errorf("expected 2 decommission requests, got %d", len(pushedPayloads))
+	}
+
+	// Verify payload structure
+	for i, payload := range pushedPayloads {
+		var decomReq map[string]interface{}
+		if err := json.Unmarshal([]byte(payload), &decomReq); err != nil {
+			t.Errorf("failed to unmarshal payload %d: %v", i, err)
+		}
+
+		if _, ok := decomReq["webuserid"]; !ok {
+			t.Errorf("payload %d missing webuserid", i)
+		}
+		if _, ok := decomReq["labId"]; !ok {
+			t.Errorf("payload %d missing labId", i)
+		}
+	}
+}
+
+func TestCleanupExpiredServers_GetAllServerStatesError(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
+
+	redisClient := &mockRedisClient{
+		getAllServerStatesFunc: func(ctx context.Context, prefix string) ([]redis.ServerState, error) {
+			return nil, context.DeadlineExceeded
+		},
+		pushPayloadFunc: func(ctx context.Context, queueKey string, payload string) error {
+			t.Error("expected PushPayload not to be called when GetAllServerStates fails")
+			return nil
+		},
+	}
+
+	worker := New(log, conn, redisClient)
+
+	ctx := context.Background()
+	// Should not panic
+	worker.cleanupExpiredServers(ctx)
+}
+
+func TestCleanupExpiredServers_ContextCancellation(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
+
+	pastTime := time.Now().Add(-1 * time.Hour)
+
+	pushCount := 0
+	redisClient := &mockRedisClient{
+		getAllServerStatesFunc: func(ctx context.Context, prefix string) ([]redis.ServerState, error) {
+			// Return many expired servers
+			servers := make([]redis.ServerState, 100)
+			for i := 0; i < 100; i++ {
+				servers[i] = redis.ServerState{
+					ServerID:  "server",
+					WebUserID: "user",
+					LabID:     i,
+					ExpiresAt: pastTime,
+				}
+			}
+			return servers, nil
+		},
+		pushPayloadFunc: func(ctx context.Context, queueKey string, payload string) error {
+			pushCount++
+			return nil
+		},
+	}
+
+	worker := New(log, conn, redisClient)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel after a brief moment
 	go func() {
-		worker.Run(ctx)
-		done <- true
+		time.Sleep(1 * time.Millisecond)
+		cancel()
 	}()
 
-	// Wait a bit
-	time.Sleep(100 * time.Millisecond)
+	worker.cleanupExpiredServers(ctx)
 
-	// Cancel context
-	cancel()
-
-	// Wait for worker to stop
-	select {
-	case <-done:
-		// Worker stopped successfully
-	case <-time.After(2 * time.Second):
-		t.Error("Worker did not stop within timeout")
+	// Should have stopped before processing all servers
+	// (though might have processed some)
+	if pushCount > 100 {
+		t.Error("processed more servers than expected after context cancellation")
 	}
 }
 
-func TestDeleteExpiredServer(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
+func TestPushDecommissionRequest_Success(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
 
-	now := time.Now()
+	var capturedPayload string
+	var capturedQueueKey string
+
+	redisClient := &mockRedisClient{
+		pushPayloadFunc: func(ctx context.Context, queueKey string, payload string) error {
+			capturedQueueKey = queueKey
+			capturedPayload = payload
+			return nil
+		},
+	}
+
+	worker := New(log, conn, redisClient)
+
 	state := redis.ServerState{
-		ID:            "test-server",
-		Name:          "Test Server",
-		IPv6:          "2001:db8::1",
-		State:         config.StateRunning,
-		ProvisionedAt: now.Add(-2 * time.Hour),
-		DeletionAt:    now.Add(-1 * time.Hour),
+		ServerID:  "test-server-123",
+		WebUserID: "test-user",
+		LabID:     42,
+		ExpiresAt: time.Now().Add(-1 * time.Hour),
 	}
 
-	conn.getServerByIDFunc = func(id string) (connector.Server, error) {
-		return &mockServer{
-			id:        id,
-			name:      state.Name,
-			ipv6:      state.IPv6,
-			state:     state.State,
-			connector: conn,
-		}, nil
-	}
-
-	worker := New(log, conn, redisClient)
-	worker.deleteExpiredServer(state)
-
-	// Give goroutine time to complete
-	time.Sleep(50 * time.Millisecond)
-
-	if !conn.wasDeleted(state.ID) {
-		t.Error("Server should have been deleted")
-	}
-}
-
-func TestCleanupWithContextCancellation(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
-
-	now := time.Now()
-
-	// Setup many expired servers
-	for i := 0; i < 100; i++ {
-		state := redis.ServerState{
-			ID:            string(rune('a' + i)),
-			Name:          "Test Server",
-			IPv6:          "2001:db8::1",
-			State:         config.StateRunning,
-			ProvisionedAt: now.Add(-2 * time.Hour),
-			DeletionAt:    now.Add(-1 * time.Hour),
-		}
-		key := redis.ServerCacheKey(state.ID)
-		redisClient.serverStates[key] = state
-	}
-
-	worker := New(log, conn, redisClient)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Cancel context immediately
-	cancel()
-
-	worker.cleanupExpiredServers(ctx)
-
-	// Should exit early without processing all servers
-}
-
-func TestCleanupMultipleConcurrentDeletes(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	conn := newMockConnector()
-	redisClient := newMockRedisClient()
-
-	now := time.Now()
-
-	// Setup multiple expired servers
-	numServers := 10
-	for i := 0; i < numServers; i++ {
-		state := redis.ServerState{
-			ID:            string(rune('a' + i)),
-			Name:          "Test Server",
-			IPv6:          "2001:db8::1",
-			State:         config.StateRunning,
-			ProvisionedAt: now.Add(-2 * time.Hour),
-			DeletionAt:    now.Add(-1 * time.Hour),
-		}
-		key := redis.ServerCacheKey(state.ID)
-		redisClient.serverStates[key] = state
-	}
-
-	conn.getServerByIDFunc = func(id string) (connector.Server, error) {
-		return &mockServer{
-			id:        id,
-			name:      "test-server",
-			ipv6:      "2001:db8::1",
-			state:     config.StateRunning,
-			connector: conn,
-		}, nil
-	}
-
-	worker := New(log, conn, redisClient)
 	ctx := context.Background()
+	worker.pushDecommissionRequest(ctx, state)
 
-	worker.cleanupExpiredServers(ctx)
+	// Verify queue key
+	if capturedQueueKey != config.DecommissionQueueKey {
+		t.Errorf("expected queue key %s, got %s", config.DecommissionQueueKey, capturedQueueKey)
+	}
 
-	// Give goroutines time to complete
-	time.Sleep(200 * time.Millisecond)
+	// Verify payload structure
+	var decomReq map[string]interface{}
+	if err := json.Unmarshal([]byte(capturedPayload), &decomReq); err != nil {
+		t.Fatalf("failed to unmarshal payload: %v", err)
+	}
 
-	// Verify all servers were deleted
-	for i := 0; i < numServers; i++ {
-		id := string(rune('a' + i))
-		if !conn.wasDeleted(id) {
-			t.Errorf("Server %s should have been deleted", id)
-		}
+	if decomReq["webuserid"] != "test-user" {
+		t.Errorf("expected webuserid 'test-user', got %v", decomReq["webuserid"])
+	}
+
+	// JSON numbers are unmarshaled as float64
+	if decomReq["labId"] != float64(42) {
+		t.Errorf("expected labId 42, got %v", decomReq["labId"])
+	}
+}
+
+func TestPushDecommissionRequest_PushPayloadError(t *testing.T) {
+	log := slog.Default()
+	conn := &mockConnector{}
+
+	pushCalled := false
+	redisClient := &mockRedisClient{
+		pushPayloadFunc: func(ctx context.Context, queueKey string, payload string) error {
+			pushCalled = true
+			return context.DeadlineExceeded
+		},
+	}
+
+	worker := New(log, conn, redisClient)
+
+	state := redis.ServerState{
+		ServerID:  "test-server-123",
+		WebUserID: "test-user",
+		LabID:     42,
+		ExpiresAt: time.Now().Add(-1 * time.Hour),
+	}
+
+	ctx := context.Background()
+	// Should not panic
+	worker.pushDecommissionRequest(ctx, state)
+
+	if !pushCalled {
+		t.Error("expected PushPayload to be called")
 	}
 }

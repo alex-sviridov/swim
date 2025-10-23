@@ -114,6 +114,9 @@ func (s *Server) Delete() error {
 					if err != nil {
 						return fmt.Errorf("refresh server state: %w", err)
 					}
+					if server == nil {
+						return fmt.Errorf("server with ID %d not found during retry", s.id)
+					}
 					continue
 				}
 			}
@@ -160,6 +163,9 @@ func (s *Server) Delete() error {
 				server, _, err = s.connector.client.Server.GetByID(ctx, s.id)
 				if err != nil {
 					return fmt.Errorf("refresh server state: %w", err)
+				}
+				if server == nil {
+					return fmt.Errorf("server with ID %d not found during retry", s.id)
 				}
 				continue
 			}

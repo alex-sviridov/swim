@@ -2,6 +2,7 @@ package cleanup
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -51,21 +52,23 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
-// cleanupExpiredServers finds and deletes expired servers
+// cleanupExpiredServers finds expired servers and pushes decommission requests to queue
 func (w *Worker) cleanupExpiredServers(ctx context.Context) {
-	expired, err := w.redisClient.GetExpiredServers(ctx, config.ServerCachePrefix)
+	// Get all server states
+	servers, err := w.redisClient.GetAllServerStates(ctx, config.ServerCachePrefix)
 	if err != nil {
-		w.log.Error("failed to get expired servers", "error", err)
+		w.log.Error("failed to get server states", "error", err)
 		return
 	}
 
-	if len(expired) == 0 {
+	if len(servers) == 0 {
 		return
 	}
 
-	w.log.Info("found expired servers", "count", len(expired))
+	now := time.Now()
+	expiredCount := 0
 
-	for _, state := range expired {
+	for _, state := range servers {
 		// Check if context was cancelled
 		select {
 		case <-ctx.Done():
@@ -74,42 +77,40 @@ func (w *Worker) cleanupExpiredServers(ctx context.Context) {
 		default:
 		}
 
-		go w.deleteExpiredServer(state)
+		// Check if server is expired
+		if state.ExpiresAt.Before(now) {
+			expiredCount++
+			w.pushDecommissionRequest(ctx, state)
+		}
+	}
+
+	if expiredCount > 0 {
+		w.log.Info("found expired servers, pushed decommission requests", "count", expiredCount)
 	}
 }
 
-// deleteExpiredServer deletes a single expired server
-func (w *Worker) deleteExpiredServer(state redis.ServerState) {
-	ctx := context.Background()
-	cacheKey := redis.ServerCacheKey(state.ID)
-
-	// Update state to "shutting down"
-	state.State = "shutting down"
-	if err := w.redisClient.PushServerState(ctx, cacheKey, state, config.ServerCacheTTL); err != nil {
-		w.log.Error("failed to update server state to shutting down", "server_id", state.ID, "error", err)
+// pushDecommissionRequest pushes a decommission request to the queue for an expired server
+func (w *Worker) pushDecommissionRequest(ctx context.Context, state redis.ServerState) {
+	// Create decommission request payload
+	decomReq := map[string]interface{}{
+		"webuserid": state.WebUserID,
+		"labId":     state.LabID,
 	}
 
-	server, err := w.conn.GetServerByID(state.ID)
+	payload, err := json.Marshal(decomReq)
 	if err != nil {
-		w.log.Error("failed to get expired server", "server_id", state.ID, "error", err)
-		// Remove from cache if server not found (already deleted)
-		if err := w.redisClient.DeleteServerState(ctx, cacheKey); err != nil {
-			w.log.Error("failed to remove non-existent server from cache", "server_id", state.ID, "error", err)
-		} else {
-			w.log.Info("removed non-existent server from cache", "server_id", state.ID)
-		}
+		w.log.Error("failed to marshal decommission request", "error", err)
 		return
 	}
 
-	if err := server.Delete(); err != nil {
-		w.log.Error("failed to delete expired server", "server_id", state.ID, "error", err)
+	// Push to decommission queue
+	if err := w.redisClient.PushPayload(ctx, config.DecommissionQueueKey, string(payload)); err != nil {
+		w.log.Error("failed to push decommission request", "error", err)
 		return
 	}
 
-	// Remove from Redis cache after successful deletion
-	if err := w.redisClient.DeleteServerState(ctx, cacheKey); err != nil {
-		w.log.Error("failed to remove server from cache", "server_id", state.ID, "error", err)
-	}
-
-	w.log.Info("deleted expired server and removed from cache", "server_id", state.ID)
+	w.log.Info("pushed decommission request for expired server",
+		"server_id", state.ServerID,
+		"webuserid", state.WebUserID,
+		"labid", state.LabID)
 }
