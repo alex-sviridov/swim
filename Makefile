@@ -8,6 +8,9 @@ test:
 	go test ./...; \
 	docker-compose -f internal/integration/docker-compose.test.yml down;
 
+lint:
+	golangci-lint run
+
 build:
 	go build -o bin/swim ./cmd/swim
 
