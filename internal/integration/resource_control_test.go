@@ -26,8 +26,8 @@ func TestResourceControl_TTLEnforcement(t *testing.T) {
 	decomm := decommissioner.New(log, mockConn, redisClient)
 
 	// Set very short TTL for testing (override via state modification)
-	os.Setenv("DEFAULT_TTL_MINUTES", "1")
-	defer os.Unsetenv("DEFAULT_TTL_MINUTES")
+	_ = os.Setenv("DEFAULT_TTL_MINUTES", "1")
+	defer func() { _ = os.Unsetenv("DEFAULT_TTL_MINUTES") }()
 
 	userID := "ttl-test-user"
 	labID := 1
@@ -120,7 +120,7 @@ func TestResourceControl_CleanupWorkerRecovery(t *testing.T) {
 		// Expire the server
 		state.ExpiresAt = time.Now().Add(-10 * time.Minute)
 		cacheKey := redis.ServerCacheKey(user.userID)
-		redisClient.PushServerState(ctx, cacheKey, *state, config.ServerCacheTTL)
+		_ = redisClient.PushServerState(ctx, cacheKey, *state, config.ServerCacheTTL)
 	}
 
 	initialServerCount := mockConn.GetServerCount()
@@ -176,10 +176,10 @@ func TestResourceControl_NoResourceLeaksOnLabSwitch(t *testing.T) {
 	defer cleanupFunc()
 
 	// Set short rate limits for testing to avoid timeouts
-	os.Setenv("PROVISION_RATE_LIMIT_SECONDS", "1")
-	os.Setenv("DECOMMISSION_RATE_LIMIT_SECONDS", "1")
-	defer os.Unsetenv("PROVISION_RATE_LIMIT_SECONDS")
-	defer os.Unsetenv("DECOMMISSION_RATE_LIMIT_SECONDS")
+	_ = os.Setenv("PROVISION_RATE_LIMIT_SECONDS", "1")
+	_ = os.Setenv("DECOMMISSION_RATE_LIMIT_SECONDS", "1")
+	defer func() { _ = os.Unsetenv("PROVISION_RATE_LIMIT_SECONDS") }()
+	defer func() { _ = os.Unsetenv("DECOMMISSION_RATE_LIMIT_SECONDS") }()
 
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -270,10 +270,10 @@ func TestResourceControl_PreventMultipleActiveProvisions(t *testing.T) {
 	defer cleanupFunc()
 
 	// Set short rate limits for testing to avoid timeouts
-	os.Setenv("PROVISION_RATE_LIMIT_SECONDS", "1")
-	os.Setenv("DECOMMISSION_RATE_LIMIT_SECONDS", "1")
-	defer os.Unsetenv("PROVISION_RATE_LIMIT_SECONDS")
-	defer os.Unsetenv("DECOMMISSION_RATE_LIMIT_SECONDS")
+	_ = os.Setenv("PROVISION_RATE_LIMIT_SECONDS", "1")
+	_ = os.Setenv("DECOMMISSION_RATE_LIMIT_SECONDS", "1")
+	defer func() { _ = os.Unsetenv("PROVISION_RATE_LIMIT_SECONDS") }()
+	defer func() { _ = os.Unsetenv("DECOMMISSION_RATE_LIMIT_SECONDS") }()
 
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))

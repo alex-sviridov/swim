@@ -39,7 +39,7 @@ func setupTestRedis(t *testing.T) (*redis.Client, func()) {
 	// Cleanup function
 	cleanup := func() {
 		// Clean all test keys
-		client.Close()
+		_ = client.Close()
 	}
 
 	// Flush the test DB to ensure clean state
@@ -83,7 +83,7 @@ func deleteKeysByPattern(ctx context.Context, client *redis.Client, pattern stri
 
 	for _, state := range states {
 		cacheKey := redis.ServerCacheKey(state.WebUserID)
-		client.DeleteServerState(ctx, cacheKey)
+		_ = client.DeleteServerState(ctx, cacheKey)
 	}
 
 	return nil
@@ -243,6 +243,12 @@ func assertServerState(t *testing.T, state *redis.ServerState, expectedStatus st
 		t.Error("Expected non-empty server ID")
 	}
 }
+
+// Prevent unused warnings for test helper functions kept for future use
+var (
+	_ = waitForServerState
+	_ = assertServerState
+)
 
 // assertServerAvailable validates that server is available and ready for SSH
 func assertServerAvailable(t *testing.T, state *redis.ServerState) {

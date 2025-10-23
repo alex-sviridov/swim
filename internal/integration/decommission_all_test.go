@@ -49,7 +49,7 @@ func TestDecommissionAll_SingleLab(t *testing.T) {
 		// labId intentionally omitted
 	}
 	decommPayload2, _ := json.Marshal(req)
-	client.PushPayload(ctx, config.DecommissionQueueKey, string(decommPayload2))
+	_ = client.PushPayload(ctx, config.DecommissionQueueKey, string(decommPayload2))
 
 	decommPayload, _ := client.PopPayload(ctx, config.DecommissionQueueKey, 5*time.Second)
 	decomm.ProcessRequest(ctx, decommPayload)
@@ -81,10 +81,10 @@ func TestDecommissionAll_LabSwitching(t *testing.T) {
 	defer cleanupFunc()
 
 	// Set short rate limits for testing to avoid timeouts
-	os.Setenv("PROVISION_RATE_LIMIT_SECONDS", "1")
-	os.Setenv("DECOMMISSION_RATE_LIMIT_SECONDS", "1")
-	defer os.Unsetenv("PROVISION_RATE_LIMIT_SECONDS")
-	defer os.Unsetenv("DECOMMISSION_RATE_LIMIT_SECONDS")
+	_ = os.Setenv("PROVISION_RATE_LIMIT_SECONDS", "1")
+	_ = os.Setenv("DECOMMISSION_RATE_LIMIT_SECONDS", "1")
+	defer func() { _ = os.Unsetenv("PROVISION_RATE_LIMIT_SECONDS") }()
+	defer func() { _ = os.Unsetenv("DECOMMISSION_RATE_LIMIT_SECONDS") }()
 
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -138,7 +138,7 @@ func TestDecommissionAll_LabSwitching(t *testing.T) {
 		"webuserid": userID,
 	}
 	reqPayload, _ := json.Marshal(req)
-	client.PushPayload(ctx, config.DecommissionQueueKey, string(reqPayload))
+	_ = client.PushPayload(ctx, config.DecommissionQueueKey, string(reqPayload))
 
 	decommPayload, _ := client.PopPayload(ctx, config.DecommissionQueueKey, 5*time.Second)
 	decomm.ProcessRequest(ctx, decommPayload)
@@ -184,7 +184,7 @@ func TestDecommissionAll_NoLabs(t *testing.T) {
 		"webuserid": userID,
 	}
 	payload, _ := json.Marshal(req)
-	client.PushPayload(ctx, config.DecommissionQueueKey, string(payload))
+	_ = client.PushPayload(ctx, config.DecommissionQueueKey, string(payload))
 
 	decommPayload, _ := client.PopPayload(ctx, config.DecommissionQueueKey, 5*time.Second)
 	decomm.ProcessRequest(ctx, decommPayload)
@@ -217,13 +217,13 @@ func TestDecommissionAll_UserIsolation(t *testing.T) {
 	pushProvisionRequest(t, ctx, client, userA, 1)
 	payload, _ := client.PopPayload(ctx, config.ProvisionQueueKey, 5*time.Second)
 	prov.ProcessRequest(ctx, payload)
-	waitForServerAvailable(ctx, client, userA, 1, 5*time.Second)
+	_, _ = waitForServerAvailable(ctx, client, userA, 1, 5*time.Second)
 
 	// User B provisions lab 2
 	pushProvisionRequest(t, ctx, client, userB, 2)
 	payload, _ = client.PopPayload(ctx, config.ProvisionQueueKey, 5*time.Second)
 	prov.ProcessRequest(ctx, payload)
-	waitForServerAvailable(ctx, client, userB, 2, 5*time.Second)
+	_, _ = waitForServerAvailable(ctx, client, userB, 2, 5*time.Second)
 
 	// Verify both users have 1 lab each
 	countA, _ := countUserLabs(ctx, client, userA)
@@ -240,7 +240,7 @@ func TestDecommissionAll_UserIsolation(t *testing.T) {
 		"webuserid": userA,
 	}
 	reqPayload, _ := json.Marshal(req)
-	client.PushPayload(ctx, config.DecommissionQueueKey, string(reqPayload))
+	_ = client.PushPayload(ctx, config.DecommissionQueueKey, string(reqPayload))
 
 	decommPayload, _ := client.PopPayload(ctx, config.DecommissionQueueKey, 5*time.Second)
 	decomm.ProcessRequest(ctx, decommPayload)
@@ -294,7 +294,7 @@ func TestDecommissionAll_VsSpecificLab(t *testing.T) {
 	pushProvisionRequest(t, ctx, client, userID, 1)
 	payload, _ := client.PopPayload(ctx, config.ProvisionQueueKey, 5*time.Second)
 	prov.ProcessRequest(ctx, payload)
-	waitForServerAvailable(ctx, client, userID, 1, 5*time.Second)
+	_, _ = waitForServerAvailable(ctx, client, userID, 1, 5*time.Second)
 
 	count, _ := countUserLabs(ctx, client, userID)
 	if count != 1 {
@@ -318,7 +318,7 @@ func TestDecommissionAll_VsSpecificLab(t *testing.T) {
 	pushProvisionRequest(t, ctx, client, userID, 2)
 	payload, _ = client.PopPayload(ctx, config.ProvisionQueueKey, 5*time.Second)
 	prov.ProcessRequest(ctx, payload)
-	waitForServerAvailable(ctx, client, userID, 2, 5*time.Second)
+	_, _ = waitForServerAvailable(ctx, client, userID, 2, 5*time.Second)
 
 	count, _ = countUserLabs(ctx, client, userID)
 	if count != 1 {
@@ -330,7 +330,7 @@ func TestDecommissionAll_VsSpecificLab(t *testing.T) {
 		"webuserid": userID,
 	}
 	reqPayload, _ := json.Marshal(req)
-	client.PushPayload(ctx, config.DecommissionQueueKey, string(reqPayload))
+	_ = client.PushPayload(ctx, config.DecommissionQueueKey, string(reqPayload))
 
 	decommPayload, _ = client.PopPayload(ctx, config.DecommissionQueueKey, 5*time.Second)
 	decomm.ProcessRequest(ctx, decommPayload)

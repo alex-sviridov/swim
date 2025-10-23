@@ -147,7 +147,7 @@ func generateServerName(labID int) string {
 func generateUID(n int) string {
 	const letters = "abcdefghijklmnopqrstuvwxyz"
 	b := make([]byte, n)
-	rand.Read(b)
+	_, _ = rand.Read(b) // crypto/rand.Read always returns len(b), nil
 	for i := range b {
 		b[i] = letters[b[i]%26]
 	}

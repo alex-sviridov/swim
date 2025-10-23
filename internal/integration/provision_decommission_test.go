@@ -133,7 +133,7 @@ func TestProvisioningAndDecommissioning_SameLabID(t *testing.T) {
 	}
 
 	// Cleanup: Decommission the server
-	decommPayload := fmt.Sprintf(`{"webuserid":"user-123","labId":42}`)
+	decommPayload := `{"webuserid":"user-123","labId":42}`
 	decomm.ProcessRequest(ctx, decommPayload)
 
 	// Verify server was deleted from cloud

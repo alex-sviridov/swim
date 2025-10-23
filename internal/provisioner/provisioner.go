@@ -149,7 +149,7 @@ func (p *Provisioner) ProcessRequest(ctx context.Context, payload string) {
 	if err != nil {
 		serverLog.Error("failed to provision server", "error", err)
 		// Delete cache on error
-		p.redisClient.DeleteServerState(ctx, cacheKey)
+		_ = p.redisClient.DeleteServerState(ctx, cacheKey)
 		return
 	}
 

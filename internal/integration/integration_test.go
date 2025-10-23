@@ -165,7 +165,7 @@ func TestEndToEnd_DecommissionAlreadyDeleted(t *testing.T) {
 
 	// Manually delete the server from connector (simulating manual deletion)
 	server, _ := mockConn.GetServerByID(serverID)
-	server.Delete()
+	_ = server.Delete()
 	t.Logf("✓ Server manually deleted from cloud provider")
 
 	// Now try to decommission via queue
@@ -362,8 +362,8 @@ func TestLabManScenario_DisconnectTimeout(t *testing.T) {
 	labID := 8
 
 	// Set short TTL for testing
-	os.Setenv("DEFAULT_TTL_MINUTES", "1")
-	defer os.Unsetenv("DEFAULT_TTL_MINUTES")
+	_ = os.Setenv("DEFAULT_TTL_MINUTES", "1")
+	defer func() { _ = os.Unsetenv("DEFAULT_TTL_MINUTES") }()
 
 	// User provisions lab
 	pushProvisionRequest(t, ctx, client, userID, labID)
@@ -384,7 +384,7 @@ func TestLabManScenario_DisconnectTimeout(t *testing.T) {
 	// Simulate time passing (expire the lab)
 	state.ExpiresAt = time.Now().Add(-1 * time.Minute)
 	cacheKey := "vmmanager:servers:" + userID
-	client.PushServerState(ctx, cacheKey, *state, config.ServerCacheTTL)
+	_ = client.PushServerState(ctx, cacheKey, *state, config.ServerCacheTTL)
 
 	// Cleanup worker runs and finds expired lab
 	cleanupWorker := cleanup.New(log, mockConn, client)

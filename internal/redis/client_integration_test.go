@@ -36,7 +36,7 @@ func setupTestRedis(t *testing.T) (*Client, func()) {
 		ctx := context.Background()
 		// Clean test keys
 		client.client.FlushDB(ctx)
-		client.Close()
+		_ = client.Close()
 	}
 
 	return client, cleanup
@@ -84,7 +84,7 @@ func TestNewClient(t *testing.T) {
 					t.Errorf("Unexpected error: %v", err)
 				}
 				if client != nil {
-					client.Close()
+					_ = client.Close()
 				}
 			}
 		})

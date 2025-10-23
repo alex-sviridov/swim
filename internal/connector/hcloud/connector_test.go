@@ -12,16 +12,16 @@ func TestNewConnector(t *testing.T) {
 	originalToken := os.Getenv("HCLOUD_TOKEN")
 	defer func() {
 		if originalToken == "" {
-			os.Unsetenv("HCLOUD_TOKEN")
+			_ = os.Unsetenv("HCLOUD_TOKEN")
 		} else {
-			os.Setenv("HCLOUD_TOKEN", originalToken)
+			_ = os.Setenv("HCLOUD_TOKEN", originalToken)
 		}
 	}()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	t.Run("missing HCLOUD_TOKEN", func(t *testing.T) {
-		os.Unsetenv("HCLOUD_TOKEN")
+		_ = os.Unsetenv("HCLOUD_TOKEN")
 
 		conn, err := NewConnector(logger, false)
 		if err == nil {
@@ -36,7 +36,7 @@ func TestNewConnector(t *testing.T) {
 	})
 
 	t.Run("valid token non-dryrun", func(t *testing.T) {
-		os.Setenv("HCLOUD_TOKEN", "test-token-123")
+		_ = os.Setenv("HCLOUD_TOKEN", "test-token-123")
 
 		conn, err := NewConnector(logger, false)
 		if err != nil {
@@ -57,7 +57,7 @@ func TestNewConnector(t *testing.T) {
 	})
 
 	t.Run("valid token with dryrun", func(t *testing.T) {
-		os.Setenv("HCLOUD_TOKEN", "test-token-123")
+		_ = os.Setenv("HCLOUD_TOKEN", "test-token-123")
 
 		conn, err := NewConnector(logger, true)
 		if err != nil {
@@ -72,7 +72,7 @@ func TestNewConnector(t *testing.T) {
 	})
 
 	t.Run("empty token string", func(t *testing.T) {
-		os.Setenv("HCLOUD_TOKEN", "")
+		_ = os.Setenv("HCLOUD_TOKEN", "")
 
 		conn, err := NewConnector(logger, false)
 		if err == nil {
@@ -218,12 +218,12 @@ func TestConnector_Integration(t *testing.T) {
 func BenchmarkNewConnector(b *testing.B) {
 	// Save and set token
 	originalToken := os.Getenv("HCLOUD_TOKEN")
-	os.Setenv("HCLOUD_TOKEN", "benchmark-token")
+	_ = os.Setenv("HCLOUD_TOKEN", "benchmark-token")
 	defer func() {
 		if originalToken == "" {
-			os.Unsetenv("HCLOUD_TOKEN")
+			_ = os.Unsetenv("HCLOUD_TOKEN")
 		} else {
-			os.Setenv("HCLOUD_TOKEN", originalToken)
+			_ = os.Setenv("HCLOUD_TOKEN", originalToken)
 		}
 	}()
 
@@ -253,15 +253,23 @@ func BenchmarkParseServerID(b *testing.B) {
 }
 
 // Example test showing the structure for mock-based tests
+// Note: These types are intentionally unused as they serve as documentation
+// for future mock implementation patterns.
 type mockServerAPI struct {
-	allFunc     func() ([]*MockHCloudServer, error)
-	getByIDFunc func(id int64) (*MockHCloudServer, error)
+	allFunc     func() ([]*MockHCloudServer, error) //nolint:unused
+	getByIDFunc func(id int64) (*MockHCloudServer, error) //nolint:unused
 }
 
 type MockHCloudServer struct {
 	ID   int64
 	Name string
 }
+
+// Prevent unused warnings for documentation types
+var (
+	_ = mockServerAPI{}
+	_ = MockHCloudServer{}
+)
 
 func TestExampleMockBasedTest(t *testing.T) {
 	t.Run("example showing mock pattern for ListServers", func(t *testing.T) {

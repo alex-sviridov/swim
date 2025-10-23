@@ -111,21 +111,21 @@ func TestGetHCloudConfigFromEnv(t *testing.T) {
 		// Restore original environment
 		for k, v := range originalEnv {
 			if v == "" {
-				os.Unsetenv(k)
+				_ = os.Unsetenv(k)
 			} else {
-				os.Setenv(k, v)
+				_ = os.Setenv(k, v)
 			}
 		}
 	}()
 
 	t.Run("missing required env vars", func(t *testing.T) {
 		// Clear all required env vars
-		os.Unsetenv("HCLOUD_DEFAULT_SERVER_TYPE")
-		os.Unsetenv("HCLOUD_DEFAULT_FIREWALL")
-		os.Unsetenv("HCLOUD_DEFAULT_IMAGE")
-		os.Unsetenv("HCLOUD_DEFAULT_LOCATION")
-		os.Unsetenv("HCLOUD_DEFAULT_SSH_KEY")
-		os.Unsetenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_SERVER_TYPE")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_FIREWALL")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_IMAGE")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_LOCATION")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_SSH_KEY")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE")
 
 		_, err := GetHCloudConfigFromEnv()
 		if err == nil {
@@ -137,12 +137,12 @@ func TestGetHCloudConfigFromEnv(t *testing.T) {
 	})
 
 	t.Run("cloud init file not found", func(t *testing.T) {
-		os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
-		os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
-		os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
-		os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
-		os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
-		os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", "/nonexistent/file.yaml")
+		_ = os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+		_ = os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
+		_ = os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+		_ = os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+		_ = os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
+		_ = os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", "/nonexistent/file.yaml")
 
 		_, err := GetHCloudConfigFromEnv()
 		if err == nil {
@@ -159,21 +159,21 @@ func TestGetHCloudConfigFromEnv(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
 		}
-		defer os.Remove(tmpFile.Name())
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 		content := "#cloud-config\n"
 		if _, err := tmpFile.WriteString(content); err != nil {
 			t.Fatalf("failed to write temp file: %v", err)
 		}
-		tmpFile.Close()
+		_ = tmpFile.Close()
 
-		os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
-		os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
-		os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
-		os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
-		os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
-		os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
-		os.Unsetenv("DEFAULT_TTL_MINUTES")
+		_ = os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+		_ = os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
+		_ = os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+		_ = os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+		_ = os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
+		_ = os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
+		_ = os.Unsetenv("DEFAULT_TTL_MINUTES")
 
 		config, err := GetHCloudConfigFromEnv()
 		if err != nil {
@@ -209,16 +209,16 @@ func TestGetHCloudConfigFromEnv(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
 		}
-		defer os.Remove(tmpFile.Name())
-		tmpFile.Close()
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+		_ = tmpFile.Close()
 
-		os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
-		os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
-		os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
-		os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
-		os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
-		os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
-		os.Setenv("DEFAULT_TTL_MINUTES", "60")
+		_ = os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+		_ = os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
+		_ = os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+		_ = os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+		_ = os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
+		_ = os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
+		_ = os.Setenv("DEFAULT_TTL_MINUTES", "60")
 
 		config, err := GetHCloudConfigFromEnv()
 		if err != nil {
@@ -236,16 +236,16 @@ func TestGetHCloudConfigFromEnv(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
 		}
-		defer os.Remove(tmpFile.Name())
-		tmpFile.Close()
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+		_ = tmpFile.Close()
 
-		os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
-		os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
-		os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
-		os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
-		os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
-		os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
-		os.Setenv("DEFAULT_TTL_MINUTES", "invalid")
+		_ = os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+		_ = os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
+		_ = os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+		_ = os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+		_ = os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
+		_ = os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
+		_ = os.Setenv("DEFAULT_TTL_MINUTES", "invalid")
 
 		config, err := GetHCloudConfigFromEnv()
 		if err != nil {

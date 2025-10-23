@@ -12,13 +12,13 @@ func TestConnector_CreateServer_DryRun(t *testing.T) {
 	originalToken := os.Getenv("HCLOUD_TOKEN")
 	defer func() {
 		if originalToken == "" {
-			os.Unsetenv("HCLOUD_TOKEN")
+			_ = os.Unsetenv("HCLOUD_TOKEN")
 		} else {
-			os.Setenv("HCLOUD_TOKEN", originalToken)
+			_ = os.Setenv("HCLOUD_TOKEN", originalToken)
 		}
 	}()
 
-	os.Setenv("HCLOUD_TOKEN", "test-token")
+	_ = os.Setenv("HCLOUD_TOKEN", "test-token")
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	t.Run("dry-run mode returns mock server", func(t *testing.T) {
@@ -74,12 +74,12 @@ func TestConnector_CreateServer_DryRun(t *testing.T) {
 
 	t.Run("dry-run mode with missing config", func(t *testing.T) {
 		// Clear environment variables
-		os.Unsetenv("HCLOUD_DEFAULT_SERVER_TYPE")
-		os.Unsetenv("HCLOUD_DEFAULT_FIREWALL")
-		os.Unsetenv("HCLOUD_DEFAULT_IMAGE")
-		os.Unsetenv("HCLOUD_DEFAULT_LOCATION")
-		os.Unsetenv("HCLOUD_DEFAULT_SSH_KEY")
-		os.Unsetenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_SERVER_TYPE")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_FIREWALL")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_IMAGE")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_LOCATION")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_SSH_KEY")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE")
 
 		conn, err := NewConnector(logger, true)
 		if err != nil {
@@ -188,31 +188,31 @@ func setupTestEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
+	t.Cleanup(func() { _ = os.Remove(tmpFile.Name()) })
 
 	content := "#cloud-config\npackages:\n  - docker\n"
 	if _, err := tmpFile.WriteString(content); err != nil {
 		t.Fatalf("failed to write temp file: %v", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Set environment variables
-	os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
-	os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-test")
-	os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
-	os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
-	os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-test")
-	os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
-	os.Setenv("DEFAULT_TTL_MINUTES", "30")
+	_ = os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+	_ = os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-test")
+	_ = os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+	_ = os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+	_ = os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-test")
+	_ = os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
+	_ = os.Setenv("DEFAULT_TTL_MINUTES", "30")
 
 	t.Cleanup(func() {
-		os.Unsetenv("HCLOUD_DEFAULT_SERVER_TYPE")
-		os.Unsetenv("HCLOUD_DEFAULT_FIREWALL")
-		os.Unsetenv("HCLOUD_DEFAULT_IMAGE")
-		os.Unsetenv("HCLOUD_DEFAULT_LOCATION")
-		os.Unsetenv("HCLOUD_DEFAULT_SSH_KEY")
-		os.Unsetenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE")
-		os.Unsetenv("DEFAULT_TTL_MINUTES")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_SERVER_TYPE")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_FIREWALL")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_IMAGE")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_LOCATION")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_SSH_KEY")
+		_ = os.Unsetenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE")
+		_ = os.Unsetenv("DEFAULT_TTL_MINUTES")
 	})
 }
 
@@ -320,24 +320,24 @@ func TestExampleMockCreateServer(t *testing.T) {
 
 // Benchmark for CreateServer in dryrun mode
 func BenchmarkConnector_CreateServer_DryRun(b *testing.B) {
-	os.Setenv("HCLOUD_TOKEN", "benchmark-token")
-	defer os.Unsetenv("HCLOUD_TOKEN")
+	_ = os.Setenv("HCLOUD_TOKEN", "benchmark-token")
+	defer func() { _ = os.Unsetenv("HCLOUD_TOKEN") }()
 
 	// Setup environment
 	tmpFile, err := os.CreateTemp("", "cloud-init-bench-*.yaml")
 	if err != nil {
 		b.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	tmpFile.WriteString("#cloud-config\n")
-	tmpFile.Close()
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	_, _ = tmpFile.WriteString("#cloud-config\n")
+	_ = tmpFile.Close()
 
-	os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
-	os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-bench")
-	os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
-	os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
-	os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-bench")
-	os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
+	_ = os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+	_ = os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-bench")
+	_ = os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+	_ = os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+	_ = os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-bench")
+	_ = os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	conn, err := NewConnector(logger, true)

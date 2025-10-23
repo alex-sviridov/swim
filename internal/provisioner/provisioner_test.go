@@ -277,11 +277,11 @@ func TestProcessRequest_CreateServerError(t *testing.T) {
 
 func TestProcessRequest_WithEnvironmentVariables(t *testing.T) {
 	// Set environment variables
-	os.Setenv("SSH_USERNAME", "custom-user")
-	os.Setenv("DEFAULT_TTL_MINUTES", "60")
+	_ = os.Setenv("SSH_USERNAME", "custom-user")
+	_ = os.Setenv("DEFAULT_TTL_MINUTES", "60")
 	defer func() {
-		os.Unsetenv("SSH_USERNAME")
-		os.Unsetenv("DEFAULT_TTL_MINUTES")
+		_ = os.Unsetenv("SSH_USERNAME")
+		_ = os.Unsetenv("DEFAULT_TTL_MINUTES")
 	}()
 
 	log := newTestLogger()
@@ -453,8 +453,12 @@ func TestPollServerState_Timeout(t *testing.T) {
 	// Function should have returned without error
 	// The state should still be in provisioning
 	state, err := mockRedis.GetServerState(ctx, cacheKey)
-	if err == nil && state.Status != config.StatusRunning {
+	if err != nil {
+		// Error getting state after timeout
+		t.Logf("State not found after timeout: %v", err)
+	} else if state.Status != config.StatusRunning {
 		// This is expected - server never reached running state
+		t.Logf("Server did not reach running state: %s", state.Status)
 	}
 }
 
@@ -524,7 +528,7 @@ func TestHandleProvisioningError(t *testing.T) {
 	}
 
 	// Cache the state first
-	mockRedis.PushServerState(ctx, cacheKey, serverState, config.ServerCacheTTL)
+	_ = mockRedis.PushServerState(ctx, cacheKey, serverState, config.ServerCacheTTL)
 
 	// Call handleProvisioningError
 	p.handleProvisioningError(ctx, mockSrv, cacheKey, serverState, "test error", errors.New("test error"))
@@ -566,7 +570,7 @@ func TestHandleProvisioningError_DeleteServerFails(t *testing.T) {
 	}
 
 	// Cache the state first
-	mockRedis.PushServerState(ctx, cacheKey, serverState, config.ServerCacheTTL)
+	_ = mockRedis.PushServerState(ctx, cacheKey, serverState, config.ServerCacheTTL)
 
 	// Call handleProvisioningError
 	p.handleProvisioningError(ctx, mockSrv, cacheKey, serverState, "test error", errors.New("test error"))
@@ -805,8 +809,8 @@ func TestProcessRequest_CompleteFlow(t *testing.T) {
 
 func TestProcessRequest_InvalidTTLEnvironmentVariable(t *testing.T) {
 	// Set invalid TTL
-	os.Setenv("DEFAULT_TTL_MINUTES", "invalid")
-	defer os.Unsetenv("DEFAULT_TTL_MINUTES")
+	_ = os.Setenv("DEFAULT_TTL_MINUTES", "invalid")
+	defer func() { _ = os.Unsetenv("DEFAULT_TTL_MINUTES") }()
 
 	log := newTestLogger()
 	mockRedis := &mockRedisClient{}

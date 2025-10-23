@@ -297,11 +297,16 @@ func TestServer_WaitForStatus_Logic(t *testing.T) {
 }
 
 // Example of what a properly mocked test would look like
+// Note: This type is intentionally unused as it serves as documentation
+// for future mock implementation patterns.
 type mockHCloudClient struct {
-	serverGetByID  func(ctx context.Context, id int64) (*hcloud.Server, *hcloud.Response, error)
-	serverShutdown func(ctx context.Context, server *hcloud.Server) (*hcloud.Action, *hcloud.Response, error)
-	serverDelete   func(ctx context.Context, server *hcloud.Server) (*hcloud.Action, *hcloud.Response, error)
+	serverGetByID  func(ctx context.Context, id int64) (*hcloud.Server, *hcloud.Response, error) //nolint:unused
+	serverShutdown func(ctx context.Context, server *hcloud.Server) (*hcloud.Action, *hcloud.Response, error) //nolint:unused
+	serverDelete   func(ctx context.Context, server *hcloud.Server) (*hcloud.Action, *hcloud.Response, error) //nolint:unused
 }
+
+// Prevent unused warning for documentation type
+var _ = mockHCloudClient{}
 
 func TestExampleMockPattern(t *testing.T) {
 	t.Run("example of how to test with mocks", func(t *testing.T) {

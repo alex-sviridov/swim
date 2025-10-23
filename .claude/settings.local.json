@@ -9,7 +9,8 @@
       "Bash(go build:*)",
       "Bash(find:*)",
       "Bash(docker-compose:*)",
-      "Bash(go tool cover:*)"
+      "Bash(go tool cover:*)",
+      "Bash(golangci-lint run:*)"
     ],
     "deny": [],
     "ask": []
