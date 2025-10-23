@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"os"
 	"strconv"
 	"time"
@@ -95,12 +96,22 @@ func GetHCloudConfigFromEnv() (*HCloudConfig, error) {
 		return nil, fmt.Errorf("missing required environment variables: %v", missing)
 	}
 
+	// Get SSH username with default
+	sshUsername := "student"
+	if envUser := os.Getenv("SSH_USERNAME"); envUser != "" {
+		sshUsername = envUser
+	}
+
 	// Read cloud-init file
-	cloudInitContent, err := os.ReadFile(cloudInitFile)
+	cloudInitTemplate, err := os.ReadFile(cloudInitFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cloud-init file: %w", err)
 	}
 
+	// Put sshUsername into the template replacing the placeholder
+	cloudInitStr := strings.ReplaceAll(string(cloudInitTemplate), "{{ SSH_USERNAME }}", sshUsername)
+
+	
 	// Get TTL with default
 	ttlMinutes := 30
 	if ttlStr := os.Getenv("DEFAULT_TTL_MINUTES"); ttlStr != "" {
@@ -116,7 +127,7 @@ func GetHCloudConfigFromEnv() (*HCloudConfig, error) {
 		Location:         location,
 		SSHKey:           sshKey,
 		CloudInitFile:    cloudInitFile,
-		CloudInitContent: string(cloudInitContent),
+		CloudInitContent: cloudInitStr,
 		TTLMinutes:       ttlMinutes,
 	}, nil
 }
