@@ -58,7 +58,7 @@ jobs:
           sarif_file: 'trivy-backend-fs.sarif'
 
   test-and-build:
-    needs: [security-scan]
+    needs: [lint, security-scan]
     name: Test and Build
     runs-on: ubuntu-latest
     steps:
