@@ -69,8 +69,13 @@ jobs:
       with:
         go-version: stable
 
-    - name: Test
-      run: go test -v ./...
+    - name: Start Redis
+      uses: supercharge/redis-github-action@v1.8.0
+      with:
+        redis-version: 6
 
+    - name: Run tests with Redis
+      run: go test -v ./...
+      
     - name: Build
       run: go build -v ./...
