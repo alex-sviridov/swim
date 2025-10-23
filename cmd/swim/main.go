@@ -17,12 +17,12 @@ func main() {
 
 	// Define CLI flags
 	redisAddr := flag.String("redis", "", "Redis connection string (required)")
-	verbose := flag.Bool("verbose", false, "Enable verbose logging (info level)")
+	silent := flag.Bool("silent", false, "Suppress verbose logging (info level)")
 	dryrun := flag.Bool("dry-run", false, "Dry-run without creating a real instance")
 	flag.Parse()
 
 	// Initialize logger
-	log := logger.New(*verbose)
+	log := logger.New(!*silent)
 
 	// Validate redis address
 	if *redisAddr == "" {

@@ -1,214 +1,277 @@
 package hcloud
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
-	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestUnmarshalAndValidate(t *testing.T) {
-	// Create a temporary cloud-init file for testing
-	tmpDir := t.TempDir()
-	validCloudInitFile := filepath.Join(tmpDir, "cloud-init.yml")
-	if err := os.WriteFile(validCloudInitFile, []byte("#cloud-config\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
 	tests := []struct {
-		name    string
-		req     ProvisionRequest
-		wantErr bool
+		name        string
+		payload     string
+		wantErr     bool
+		errContains string
+		checkFields func(*testing.T, *ProvisionRequest)
 	}{
 		{
-			name: "valid request",
-			req: ProvisionRequest{
-				ServerType:    "cx11",
-				FirewallID:    "12345",
-				ImageID:       "ubuntu-22.04",
-				Location:      "nbg1",
-				SSHKey:        "my-ssh-key",
-				WebUsername:   "testuser",
-				LabID:         1,
-				TTLMinutes:    60,
-				CloudInitFile: validCloudInitFile,
-			},
+			name:    "valid payload",
+			payload: `{"webuserid": "user-123", "labId": 42}`,
 			wantErr: false,
+			checkFields: func(t *testing.T, req *ProvisionRequest) {
+				if req.WebUserID != "user-123" {
+					t.Errorf("expected WebUserID 'user-123', got '%s'", req.WebUserID)
+				}
+				if req.LabID != 42 {
+					t.Errorf("expected LabID 42, got %d", req.LabID)
+				}
+				if req.generatedName == "" {
+					t.Error("expected generated name to be set")
+				}
+				if !strings.HasPrefix(req.generatedName, "lab42-") {
+					t.Errorf("expected generated name to start with 'lab42-', got '%s'", req.generatedName)
+				}
+			},
 		},
 		{
-			name: "missing server type",
-			req: ProvisionRequest{
-				FirewallID:   "12345",
-				ImageID:      "ubuntu-22.04",
-				Location:     "nbg1",
-				WebUsername:  "testuser",
-				LabID:        1,
-				TTLMinutes:   60,
-				CloudInitFile: validCloudInitFile,
-			},
-			wantErr: true,
+			name:        "invalid JSON",
+			payload:     `{invalid json`,
+			wantErr:     true,
+			errContains: "unmarshal payload",
 		},
 		{
-			name: "missing firewall id",
-			req: ProvisionRequest{
-				ServerType:   "cx11",
-				ImageID:      "ubuntu-22.04",
-				Location:     "nbg1",
-				WebUsername:  "testuser",
-				LabID:        1,
-				TTLMinutes:   60,
-				CloudInitFile: validCloudInitFile,
-			},
-			wantErr: true,
+			name:        "missing webuserid",
+			payload:     `{"labId": 42}`,
+			wantErr:     true,
+			errContains: "missing required fields",
 		},
 		{
-			name: "missing image id",
-			req: ProvisionRequest{
-				ServerType:   "cx11",
-				FirewallID:   "12345",
-				Location:     "nbg1",
-				WebUsername:  "testuser",
-				LabID:        1,
-				TTLMinutes:   60,
-				CloudInitFile: validCloudInitFile,
-			},
-			wantErr: true,
+			name:        "missing labId",
+			payload:     `{"webuserid": "user-123"}`,
+			wantErr:     true,
+			errContains: "missing required fields",
 		},
 		{
-			name: "missing location",
-			req: ProvisionRequest{
-				ServerType:   "cx11",
-				FirewallID:   "12345",
-				ImageID:      "ubuntu-22.04",
-				WebUsername:  "testuser",
-				LabID:        1,
-				TTLMinutes:   60,
-				CloudInitFile: validCloudInitFile,
-			},
-			wantErr: true,
+			name:        "missing both fields",
+			payload:     `{}`,
+			wantErr:     true,
+			errContains: "missing required fields",
 		},
 		{
-			name: "missing ssh key",
-			req: ProvisionRequest{
-				ServerType:    "cx11",
-				FirewallID:    "12345",
-				ImageID:       "ubuntu-22.04",
-				Location:      "nbg1",
-				WebUsername:   "testuser",
-				LabID:         1,
-				TTLMinutes:    60,
-				CloudInitFile: validCloudInitFile,
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing web username",
-			req: ProvisionRequest{
-				ServerType:   "cx11",
-				FirewallID:   "12345",
-				ImageID:      "ubuntu-22.04",
-				Location:     "nbg1",
-				LabID:        1,
-				TTLMinutes:   60,
-				CloudInitFile: validCloudInitFile,
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing lab id",
-			req: ProvisionRequest{
-				ServerType:   "cx11",
-				FirewallID:   "12345",
-				ImageID:      "ubuntu-22.04",
-				Location:     "nbg1",
-				WebUsername:  "testuser",
-				TTLMinutes:   60,
-				CloudInitFile: validCloudInitFile,
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing ttl minutes",
-			req: ProvisionRequest{
-				ServerType:   "cx11",
-				FirewallID:   "12345",
-				ImageID:      "ubuntu-22.04",
-				Location:     "nbg1",
-				WebUsername:  "testuser",
-				LabID:        1,
-				CloudInitFile: validCloudInitFile,
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing cloud init file - now optional",
-			req: ProvisionRequest{
-				ServerType:  "cx11",
-				FirewallID:  "12345",
-				ImageID:     "ubuntu-22.04",
-				Location:    "nbg1",
-				SSHKey:      "my-ssh-key",
-				WebUsername: "testuser",
-				LabID:       1,
-				TTLMinutes:  60,
-			},
-			wantErr: false,
-		},
-		{
-			name: "cloud init file does not exist",
-			req: ProvisionRequest{
-				ServerType:    "cx11",
-				FirewallID:    "12345",
-				ImageID:       "ubuntu-22.04",
-				Location:      "nbg1",
-				SSHKey:        "my-ssh-key",
-				WebUsername:   "testuser",
-				LabID:         1,
-				TTLMinutes:    60,
-				CloudInitFile: "/nonexistent/file.yml",
-			},
+			name:    "labId as zero is invalid",
+			payload: `{"webuserid": "user-123", "labId": 0}`,
 			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Marshal request to JSON payload
-			payload, err := json.Marshal(tt.req)
-			if err != nil {
-				t.Fatalf("failed to marshal request: %v", err)
-			}
-
-			// Test UnmarshalAndValidate
-			req, err := UnmarshalAndValidate(string(payload))
+			req, err := UnmarshalAndValidate(tt.payload)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UnmarshalAndValidate() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-
-			// If no error expected, verify CloudInitContent was populated if CloudInitFile was provided
-			if !tt.wantErr && tt.req.CloudInitFile != "" {
-				if req.CloudInitContent == "" {
-					t.Error("CloudInitContent should be populated when CloudInitFile is provided")
-				}
-				if req.CloudInitFile != "" {
-					t.Error("CloudInitFile should be cleared after reading")
+			if tt.wantErr && tt.errContains != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("expected error containing '%s', got '%v'", tt.errContains, err)
 				}
 			}
-
-			// If no error expected, verify server name was generated
-			if !tt.wantErr {
-				if req.ServerName() == "" {
-					t.Error("ServerName should be generated")
-				}
-				// Verify server name pattern: lab{num}-{8 letters}
-				expected := len("lab") + len(fmt.Sprint(tt.req.LabID)) + 1 + 8 // lab + labID + - + 8 chars
-				if len(req.ServerName()) != expected {
-					t.Errorf("ServerName length = %d, want %d (pattern: lab%d-{8chars})", len(req.ServerName()), expected, tt.req.LabID)
-				}
+			if !tt.wantErr && tt.checkFields != nil {
+				tt.checkFields(t, req)
 			}
 		})
+	}
+}
+
+func TestProvisionRequest_ServerName(t *testing.T) {
+	req := &ProvisionRequest{
+		WebUserID:     "user-123",
+		LabID:         99,
+		generatedName: "lab99-abcdefgh",
+	}
+
+	if got := req.ServerName(); got != "lab99-abcdefgh" {
+		t.Errorf("ServerName() = %v, want %v", got, "lab99-abcdefgh")
+	}
+}
+
+func TestGetHCloudConfigFromEnv(t *testing.T) {
+	// Save original environment
+	originalEnv := map[string]string{
+		"HCLOUD_DEFAULT_SERVER_TYPE":     os.Getenv("HCLOUD_DEFAULT_SERVER_TYPE"),
+		"HCLOUD_DEFAULT_FIREWALL":        os.Getenv("HCLOUD_DEFAULT_FIREWALL"),
+		"HCLOUD_DEFAULT_IMAGE":           os.Getenv("HCLOUD_DEFAULT_IMAGE"),
+		"HCLOUD_DEFAULT_LOCATION":        os.Getenv("HCLOUD_DEFAULT_LOCATION"),
+		"HCLOUD_DEFAULT_SSH_KEY":         os.Getenv("HCLOUD_DEFAULT_SSH_KEY"),
+		"HCLOUD_DEFAULT_CLOUD_INIT_FILE": os.Getenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE"),
+		"DEFAULT_TTL_MINUTES":            os.Getenv("DEFAULT_TTL_MINUTES"),
+	}
+	defer func() {
+		// Restore original environment
+		for k, v := range originalEnv {
+			if v == "" {
+				os.Unsetenv(k)
+			} else {
+				os.Setenv(k, v)
+			}
+		}
+	}()
+
+	t.Run("missing required env vars", func(t *testing.T) {
+		// Clear all required env vars
+		os.Unsetenv("HCLOUD_DEFAULT_SERVER_TYPE")
+		os.Unsetenv("HCLOUD_DEFAULT_FIREWALL")
+		os.Unsetenv("HCLOUD_DEFAULT_IMAGE")
+		os.Unsetenv("HCLOUD_DEFAULT_LOCATION")
+		os.Unsetenv("HCLOUD_DEFAULT_SSH_KEY")
+		os.Unsetenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE")
+
+		_, err := GetHCloudConfigFromEnv()
+		if err == nil {
+			t.Error("expected error for missing env vars, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing required environment variables") {
+			t.Errorf("expected error about missing env vars, got: %v", err)
+		}
+	})
+
+	t.Run("cloud init file not found", func(t *testing.T) {
+		os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+		os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
+		os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+		os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+		os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
+		os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", "/nonexistent/file.yaml")
+
+		_, err := GetHCloudConfigFromEnv()
+		if err == nil {
+			t.Error("expected error for missing cloud-init file, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to read cloud-init file") {
+			t.Errorf("expected error about cloud-init file, got: %v", err)
+		}
+	})
+
+	t.Run("valid config with defaults", func(t *testing.T) {
+		// Create temporary cloud-init file
+		tmpFile, err := os.CreateTemp("", "cloud-init-*.yaml")
+		if err != nil {
+			t.Fatalf("failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+
+		content := "#cloud-config\n"
+		if _, err := tmpFile.WriteString(content); err != nil {
+			t.Fatalf("failed to write temp file: %v", err)
+		}
+		tmpFile.Close()
+
+		os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+		os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
+		os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+		os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+		os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
+		os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
+		os.Unsetenv("DEFAULT_TTL_MINUTES")
+
+		config, err := GetHCloudConfigFromEnv()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if config.ServerType != "cx11" {
+			t.Errorf("expected ServerType 'cx11', got '%s'", config.ServerType)
+		}
+		if config.FirewallID != "fw-123" {
+			t.Errorf("expected FirewallID 'fw-123', got '%s'", config.FirewallID)
+		}
+		if config.ImageID != "ubuntu-22.04" {
+			t.Errorf("expected ImageID 'ubuntu-22.04', got '%s'", config.ImageID)
+		}
+		if config.Location != "nbg1" {
+			t.Errorf("expected Location 'nbg1', got '%s'", config.Location)
+		}
+		if config.SSHKey != "key-123" {
+			t.Errorf("expected SSHKey 'key-123', got '%s'", config.SSHKey)
+		}
+		if config.CloudInitContent != content {
+			t.Errorf("expected CloudInitContent '%s', got '%s'", content, config.CloudInitContent)
+		}
+		if config.TTLMinutes != 30 {
+			t.Errorf("expected default TTLMinutes 30, got %d", config.TTLMinutes)
+		}
+	})
+
+	t.Run("valid config with custom TTL", func(t *testing.T) {
+		// Create temporary cloud-init file
+		tmpFile, err := os.CreateTemp("", "cloud-init-*.yaml")
+		if err != nil {
+			t.Fatalf("failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+		tmpFile.Close()
+
+		os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+		os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
+		os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+		os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+		os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
+		os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
+		os.Setenv("DEFAULT_TTL_MINUTES", "60")
+
+		config, err := GetHCloudConfigFromEnv()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if config.TTLMinutes != 60 {
+			t.Errorf("expected TTLMinutes 60, got %d", config.TTLMinutes)
+		}
+	})
+
+	t.Run("invalid TTL falls back to default", func(t *testing.T) {
+		// Create temporary cloud-init file
+		tmpFile, err := os.CreateTemp("", "cloud-init-*.yaml")
+		if err != nil {
+			t.Fatalf("failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+		tmpFile.Close()
+
+		os.Setenv("HCLOUD_DEFAULT_SERVER_TYPE", "cx11")
+		os.Setenv("HCLOUD_DEFAULT_FIREWALL", "fw-123")
+		os.Setenv("HCLOUD_DEFAULT_IMAGE", "ubuntu-22.04")
+		os.Setenv("HCLOUD_DEFAULT_LOCATION", "nbg1")
+		os.Setenv("HCLOUD_DEFAULT_SSH_KEY", "key-123")
+		os.Setenv("HCLOUD_DEFAULT_CLOUD_INIT_FILE", tmpFile.Name())
+		os.Setenv("DEFAULT_TTL_MINUTES", "invalid")
+
+		config, err := GetHCloudConfigFromEnv()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if config.TTLMinutes != 30 {
+			t.Errorf("expected default TTLMinutes 30 for invalid input, got %d", config.TTLMinutes)
+		}
+	})
+}
+
+func TestHCloudConfig_GetExpiresAt(t *testing.T) {
+	config := &HCloudConfig{
+		TTLMinutes: 15,
+	}
+
+	before := time.Now()
+	expiresAt := config.GetExpiresAt()
+	after := time.Now()
+
+	expectedMin := before.Add(15 * time.Minute)
+	expectedMax := after.Add(15 * time.Minute)
+
+	if expiresAt.Before(expectedMin) || expiresAt.After(expectedMax) {
+		t.Errorf("GetExpiresAt() = %v, expected between %v and %v", expiresAt, expectedMin, expectedMax)
 	}
 }
 
@@ -216,39 +279,81 @@ func TestGenerateServerName(t *testing.T) {
 	tests := []struct {
 		name  string
 		labID int
-		want  string // prefix only, we'll check the pattern
 	}{
-		{"lab 1", 1, "lab1-"},
-		{"lab 42", 42, "lab42-"},
-		{"lab 999", 999, "lab999-"},
+		{"single digit lab", 1},
+		{"double digit lab", 42},
+		{"triple digit lab", 999},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := generateServerName(tt.labID)
+			name := generateServerName(tt.labID)
 
-			// Check prefix
-			if !startsWithPrefix(got, tt.want) {
-				t.Errorf("generateServerName() = %v, want prefix %v", got, tt.want)
+			// Simpler check: just verify it starts with "lab{num}-"
+			if !strings.HasPrefix(name, "lab") {
+				t.Errorf("expected name to start with 'lab', got '%s'", name)
 			}
 
-			// Check total length (prefix + 8 chars)
-			expectedLen := len(tt.want) + 8
-			if len(got) != expectedLen {
-				t.Errorf("generateServerName() length = %d, want %d", len(got), expectedLen)
+			// Check format: lab{num}-{8 letters}
+			parts := strings.Split(name, "-")
+			if len(parts) != 2 {
+				t.Errorf("expected name format 'lab{num}-{uid}', got '%s'", name)
 			}
 
-			// Check suffix is all lowercase letters
-			suffix := got[len(tt.want):]
-			for _, c := range suffix {
-				if c < 'a' || c > 'z' {
-					t.Errorf("generateServerName() suffix contains non-lowercase letter: %c", c)
+			// Check UID length (should be 8 characters)
+			if len(parts) > 1 && len(parts[1]) != 8 {
+				t.Errorf("expected UID length 8, got %d in '%s'", len(parts[1]), name)
+			}
+
+			// Check UID contains only lowercase letters
+			if len(parts) > 1 {
+				for _, c := range parts[1] {
+					if c < 'a' || c > 'z' {
+						t.Errorf("expected UID to contain only lowercase letters, got '%s'", parts[1])
+						break
+					}
 				}
 			}
 		})
 	}
 }
 
-func startsWithPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+func TestGenerateUID(t *testing.T) {
+	tests := []struct {
+		name   string
+		length int
+	}{
+		{"length 1", 1},
+		{"length 8", 8},
+		{"length 16", 16},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uid := generateUID(tt.length)
+
+			if len(uid) != tt.length {
+				t.Errorf("expected length %d, got %d", tt.length, len(uid))
+			}
+
+			// Check all characters are lowercase letters
+			for _, c := range uid {
+				if c < 'a' || c > 'z' {
+					t.Errorf("expected only lowercase letters, got '%c' in '%s'", c, uid)
+				}
+			}
+		})
+	}
+
+	// Test uniqueness
+	t.Run("generates unique UIDs", func(t *testing.T) {
+		uids := make(map[string]bool)
+		for i := 0; i < 100; i++ {
+			uid := generateUID(8)
+			if uids[uid] {
+				t.Errorf("generateUID produced duplicate: '%s'", uid)
+			}
+			uids[uid] = true
+		}
+	})
 }

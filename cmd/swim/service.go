@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alex-sviridov/swim/internal/cleanup"
+	"github.com/alex-sviridov/swim/internal/config"
 	"github.com/alex-sviridov/swim/internal/connector"
 	"github.com/alex-sviridov/swim/internal/decommissioner"
 	"github.com/alex-sviridov/swim/internal/provisioner"
@@ -17,9 +18,7 @@ import (
 )
 
 const (
-	provisionQueueKey   = "swim:provision:queue"
-	decommissionQueueKey = "swim:decomission:queue"
-	queueTimeout        = 30 * time.Second
+	queueTimeout = 30 * time.Second
 )
 
 // runQueueProcessor orchestrates the queue processing and cleanup workers
@@ -49,12 +48,12 @@ func runQueueProcessor(log *slog.Logger, conn connector.Connector, redisClient r
 	decomm := decommissioner.New(log, conn, redisClient)
 
 	// Start provision queue processor
-	go processQueue(ctx, &wg, log, redisClient, provisionQueueKey, "provision", func(payload string) {
+	go processQueue(ctx, &wg, log, redisClient, config.ProvisionQueueKey, "provision", func(payload string) {
 		prov.ProcessRequest(ctx, payload)
 	})
 
 	// Start decommission queue processor
-	go processQueue(ctx, &wg, log, redisClient, decommissionQueueKey, "decommission", func(payload string) {
+	go processQueue(ctx, &wg, log, redisClient, config.DecommissionQueueKey, "decommission", func(payload string) {
 		decomm.ProcessRequest(ctx, payload)
 	})
 

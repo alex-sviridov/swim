@@ -12,10 +12,16 @@ import (
 // CreateServer is the internal implementation that creates a new Hetzner Cloud server
 // This method uses hcloud-specific types and has no knowledge of the connector interface
 func (c *Connector) CreateServer(payload string) (connector.Server, error) {
-	// Unmarshal, validate, and transform cloud-init file to content
+	// Unmarshal and validate the minimal request
 	req, err := UnmarshalAndValidate(payload)
 	if err != nil {
 		return nil, err
+	}
+
+	// Get Hetzner Cloud configuration from environment
+	hcloudConfig, err := GetHCloudConfigFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("get hcloud config: %w", err)
 	}
 
 	if c.dryrun {
@@ -29,14 +35,14 @@ func (c *Connector) CreateServer(payload string) (connector.Server, error) {
 		}
 		c.log.Info("[DRY-RUN] Would create server",
 			"name", req.ServerName(),
-			"type", req.ServerType,
-			"firewall_id", req.FirewallID,
-			"location", req.Location)
+			"type", hcloudConfig.ServerType,
+			"firewall_id", hcloudConfig.FirewallID,
+			"location", hcloudConfig.Location)
 		return dryRunServer, nil
 	}
 
 	// Create the server
-	serverID, err := c.createServer(*req)
+	serverID, err := c.createServer(*req, *hcloudConfig)
 	if err != nil {
 		return nil, fmt.Errorf("create server: %w", err)
 	}
@@ -52,55 +58,57 @@ func (c *Connector) CreateServer(payload string) (connector.Server, error) {
 }
 
 // createServer creates a new server instance
-func (c *Connector) createServer(req ProvisionRequest) (int64, error) {
+func (c *Connector) createServer(req ProvisionRequest, hcloudConfig HCloudConfig) (int64, error) {
 	ctx := context.Background()
 
 	// Get firewall if provided
 	var firewalls []*hcloud.ServerCreateFirewall
-	if req.FirewallID != "" {
-		firewall, _, err := c.client.Firewall.Get(ctx, req.FirewallID)
+	if hcloudConfig.FirewallID != "" {
+		firewall, _, err := c.client.Firewall.Get(ctx, hcloudConfig.FirewallID)
 		if err != nil {
 			return 0, fmt.Errorf("get firewall: %w", err)
 		}
 		if firewall == nil {
-			return 0, fmt.Errorf("firewall '%s' not found", req.FirewallID)
+			return 0, fmt.Errorf("firewall '%s' not found", hcloudConfig.FirewallID)
 		}
 		firewalls = []*hcloud.ServerCreateFirewall{{Firewall: *firewall}}
 	}
 
 	// Get SSH key
-	sshKey, _, err := c.client.SSHKey.Get(ctx, req.SSHKey)
+	sshKey, _, err := c.client.SSHKey.Get(ctx, hcloudConfig.SSHKey)
 	if err != nil {
 		return 0, fmt.Errorf("get ssh key: %w", err)
 	}
 	if sshKey == nil {
-		return 0, fmt.Errorf("ssh key '%s' not found", req.SSHKey)
+		return 0, fmt.Errorf("ssh key '%s' not found", hcloudConfig.SSHKey)
 	}
 
 	// Prepare server create options
 	createOpts := hcloud.ServerCreateOpts{
 		Name:             req.ServerName(),
-		ServerType:       &hcloud.ServerType{Name: req.ServerType},
-		Image:            &hcloud.Image{Name: req.ImageID},
-		Location:         &hcloud.Location{Name: req.Location},
+		ServerType:       &hcloud.ServerType{Name: hcloudConfig.ServerType},
+		Image:            &hcloud.Image{Name: hcloudConfig.ImageID},
+		Location:         &hcloud.Location{Name: hcloudConfig.Location},
 		StartAfterCreate: hcloud.Ptr(true),
 		PublicNet:        &hcloud.ServerCreatePublicNet{EnableIPv6: true},
-		UserData:         req.CloudInitContent,
+		UserData:         hcloudConfig.CloudInitContent,
 		SSHKeys:          []*hcloud.SSHKey{sshKey},
 		Labels: map[string]string{
-			"type":    "ephymerical-lab-host",
-			"webuser": req.WebUsername,
-			"labid":   strconv.Itoa(req.LabID),
-			"ttl":     strconv.Itoa(req.TTLMinutes),
+			"type":      "ephymerical-lab-host",
+			"webuserid": req.WebUserID,
+			"labid":     strconv.Itoa(req.LabID),
+			"ttl":       strconv.Itoa(hcloudConfig.TTLMinutes),
 		},
 		Firewalls: firewalls,
 	}
 
 	c.log.Info("creating server",
 		"name", req.ServerName(),
-		"type", req.ServerType,
-		"image", req.ImageID,
-		"location", req.Location)
+		"type", hcloudConfig.ServerType,
+		"image", hcloudConfig.ImageID,
+		"location", hcloudConfig.Location,
+		"webuserid", req.WebUserID,
+		"labid", req.LabID)
 
 	result, _, err := c.client.Server.Create(ctx, createOpts)
 	if err != nil {
