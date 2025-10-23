@@ -2,7 +2,7 @@
 
 # Create user 'student' with sudo privileges
 users:
-  - name: student
+  - name: {{ SSH_USERNAME }}
     groups: sudo
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
